@@ -1,0 +1,21 @@
+# Instagram Scraper
+
+Instagram scraping module - Coming Soon
+
+## Planned Features
+
+- Scrape Instagram posts
+- Extract user profiles and stories
+- Download images and videos
+- Export to JSON/CSV formats
+
+## Setup
+
+```bash
+# Install dependencies (when available)
+pip install -r requirements.txt
+```
+
+## Notes
+
+Instagram scraping tools will be implemented in future versions.
