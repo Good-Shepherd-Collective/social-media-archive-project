@@ -161,18 +161,60 @@ Just send me a tweet URL to get started!
             tweet_data = await scrape_tweet_by_url(url)
             
             if tweet_data:
-                # Prepare response
-                response_text = f"""
-✅ **Tweet scraped successfully!**
-
-**User:** @{tweet_data.get('author', 'Unknown')} ({tweet_data.get('author_name', 'Unknown')})
-**Text:** {tweet_data.get('text', 'No text')[:200]}{'...' if len(tweet_data.get('text', '')) > 200 else ''}
-**Date:** {tweet_data.get('created_at', 'Unknown')}
-**Likes:** {tweet_data.get('like_count', 0)} | **Retweets:** {tweet_data.get('retweet_count', 0)} | **Replies:** {tweet_data.get('reply_count', 0)}
-
-**Environment:** {self.environment}
-                **Server:** {self.server_name}
-                """
+                # Check file locations and create response
+                file_locations = []
+                expected_filename = f"tweet_{tweet_data.get('id')}.json"
+                
+                # Check multiple possible locations
+                possible_paths = [
+                    f"./{expected_filename}",
+                    f"./scraped_data/{expected_filename}",
+                    f"/home/ubuntu/social-media-archive-project/{expected_filename}",
+                    f"/home/ubuntu/social-media-archive-project/scraped_data/{expected_filename}"
+                ]
+                
+                for path in possible_paths:
+                    if os.path.exists(path):
+                        file_locations.append(path)
+                
+                # Create file URLs
+                file_urls = []
+                for location in file_locations:
+                    # Convert local path to web URL
+                    filename = os.path.basename(location)
+                    file_url = f"https://ov-ab103a.infomaniak.ch/data/{filename}"
+                    file_urls.append(file_url)
+                
+                # Prepare response in the requested format
+                tweet_text = tweet_data.get('text', 'No text')
+                if len(tweet_text) > 100:
+                    display_text = tweet_text[:100] + "..."
+                else:
+                    display_text = tweet_text
+                
+                response_parts = [
+                    "✅ Tweet scraped successfully!",
+                    "",
+                    f"👤 Author: @{tweet_data.get('author', 'Unknown')} ({tweet_data.get('author_name', 'Unknown')})",
+                    f"📅 Date: {tweet_data.get('created_at', 'Unknown')}",
+                    f"👍 Likes: {tweet_data.get('like_count', 0)} | 🔄 Retweets: {tweet_data.get('retweet_count', 0)} | 💬 Replies: {tweet_data.get('reply_count', 0)}",
+                    "",
+                    f"Text: {display_text}",
+                    "",
+                ]
+                
+                # Add file information
+                if file_urls:
+                    if len(file_urls) == 1:
+                        response_parts.append(f"💾 Saved to: {file_urls[0]}")
+                    else:
+                        response_parts.append(f"💾 Saved to {len(file_urls)} location(s):")
+                        for url in file_urls:
+                            response_parts.append(f"  • {url}")
+                else:
+                    response_parts.append(f"💾 Saved locally (check server for file)")
+                
+                response_text = "\n".join(response_parts)
                 
                 # Edit the processing message
                 await processing_msg.edit_text(response_text, parse_mode='Markdown')
