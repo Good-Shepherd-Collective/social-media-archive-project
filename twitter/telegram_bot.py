@@ -13,6 +13,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
 from twscrape import API
+from storage_utils import storage_manager
 
 # Load environment variables
 load_dotenv()
@@ -92,18 +93,20 @@ class TwitterScraperBot:
                     'view_count': getattr(tweet, 'viewCount', None),
                     'url': url,
                     'scraped_at': str(datetime.now()),
-                    'scraped_via': 'telegram_bot'
+                    'scraped_via': 'telegram_bot',
+                    'environment': storage_manager.environment
                 }
                 
-                # Save to file
-                filename = f"../scraped_data/tweet_{tweet_id}.json"
-                os.makedirs(os.path.dirname(filename), exist_ok=True)
+                # Save to file(s) using storage manager
+                saved_paths = storage_manager.save_tweet_data(tweet_data, str(tweet_id))
                 
-                with open(filename, 'w', encoding='utf-8') as f:
-                    json.dump(tweet_data, f, indent=2, ensure_ascii=False)
-                
-                logger.info(f"Tweet {tweet_id} scraped and saved to {filename}")
-                return tweet_data
+                if saved_paths:
+                    logger.info(f"Tweet {tweet_id} scraped and saved to {len(saved_paths)} location(s)")
+                    tweet_data['saved_paths'] = saved_paths
+                    return tweet_data
+                else:
+                    logger.error(f"Failed to save tweet {tweet_id} to any location")
+                    return None
             else:
                 logger.warning(f"Tweet not found or not accessible: {url}")
                 return None
@@ -124,17 +127,43 @@ class TwitterScraperBot:
             await update.message.reply_text("❌ You are not authorized to use this bot.")
             return
         
+        storage_info = storage_manager.get_environment_info()
+        
         await update.message.reply_text(
             "🐦 **Twitter Scraper Bot**\\n\\n"
             "Send me a Twitter/X URL and I'll scrape it for you\\!\\n\\n"
             "**Commands:**\\n"
             "/start \\- Show this help message\\n"
-            "/status \\- Check bot status\\n\\n"
+            "/status \\- Check bot status\\n"
+            "/storage \\- Show storage configuration\\n\\n"
             "**Usage:**\\n"
             "Just send a tweet URL like:\\n"
-            "`https://x.com/username/status/123456789`",
+            "`https://x.com/username/status/123456789`\\n\\n"
+            f"**Storage:** {storage_info}",
             parse_mode='MarkdownV2'
         )
+    
+    async def storage_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /storage command"""
+        if not self.is_authorized(update.effective_user.id):
+            await update.message.reply_text("❌ You are not authorized to use this bot.")
+            return
+        
+        storage_info = storage_manager.get_environment_info()
+        environment = storage_manager.environment
+        
+        storage_msg = f"💾 **Storage Configuration**\\n\\n"
+        storage_msg += f"🌍 **Environment:** `{environment}`\\n"
+        storage_msg += f"📁 **Storage location\\(s\\):** {storage_info}\\n\\n"
+        
+        if environment == 'local':
+            storage_msg += "ℹ️ Tweets are saved locally only\\."
+        elif environment == 'server':
+            storage_msg += "ℹ️ Tweets are saved to server only\\."
+        else:
+            storage_msg += "ℹ️ Tweets are saved to both local and server locations\\."
+        
+        await update.message.reply_text(storage_msg, parse_mode='MarkdownV2')
     
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /status command"""
@@ -149,6 +178,7 @@ class TwitterScraperBot:
             status_msg = f"🤖 **Bot Status**\\n\\n"
             status_msg += f"✅ Bot is running\\n"
             status_msg += f"🐦 Active Twitter accounts: {len(active_accounts)}\\n"
+            status_msg += f"💾 Storage: {storage_manager.get_environment_info()}\\n"
             
             if active_accounts:
                 for acc in active_accounts:
@@ -198,6 +228,10 @@ class TwitterScraperBot:
             tweet_data = await self.scrape_tweet(tweet_url)
             
             if tweet_data:
+                # Get saved paths for display
+                saved_paths = tweet_data.get('saved_paths', [])
+                paths_display = "\\n".join([f"  • `{path}`" for path in saved_paths])
+                
                 # Send success message with tweet details
                 success_msg = (
                     f"✅ **Tweet scraped successfully\\!**\\n\\n"
@@ -207,7 +241,7 @@ class TwitterScraperBot:
                     f"🔄 **Retweets:** {tweet_data['retweet_count']}\\n"
                     f"💬 **Replies:** {tweet_data['reply_count']}\\n\\n"
                     f"**Text:**\\n{tweet_data['text'][:200]}{'\\.\\.\\.' if len(tweet_data['text']) > 200 else ''}\\n\\n"
-                    f"💾 Saved to: `tweet_{tweet_data['id']}\\.json`"
+                    f"💾 **Saved to {len(saved_paths)} location\\(s\\):**\\n{paths_display}"
                 )
                 
                 await processing_msg.edit_text(success_msg, parse_mode='MarkdownV2')
@@ -225,12 +259,16 @@ class TwitterScraperBot:
             logger.error("Failed to setup Twitter account. Bot cannot start.")
             return
         
+        # Log storage configuration
+        logger.info(f"Storage configuration: {storage_manager.get_environment_info()}")
+        
         # Create application
         application = Application.builder().token(self.bot_token).build()
         
         # Add handlers
         application.add_handler(CommandHandler("start", self.start_command))
         application.add_handler(CommandHandler("status", self.status_command))
+        application.add_handler(CommandHandler("storage", self.storage_command))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
         
         # Start bot

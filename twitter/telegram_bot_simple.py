@@ -7,6 +7,7 @@ Receives tweet URLs via Telegram and automatically scrapes them
 import asyncio
 import logging
 import os
+from storage_utils import storage_manager
 import json
 import sys
 from datetime import datetime
@@ -90,14 +91,12 @@ async def scrape_tweet(url: str) -> dict:
                 'scraped_via': 'telegram_bot'
             }
             
-            # Save to file
-            filename = f"../scraped_data/tweet_{tweet_id}.json"
-            os.makedirs(os.path.dirname(filename), exist_ok=True)
+            # Save to file(s) using storage manager
+            saved_paths = storage_manager.save_tweet_data(tweet_data, str(tweet_id))
             
-            with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(tweet_data, f, indent=2, ensure_ascii=False)
-            
-            logger.info(f"Tweet {tweet_id} scraped and saved to {filename}")
+            if saved_paths:
+                logger.info(f"Tweet {tweet_id} scraped and saved to {len(saved_paths)} location(s)")
+                tweet_data["saved_paths"] = saved_paths
             return tweet_data
         else:
             logger.warning(f"Tweet not found or not accessible: {url}")
