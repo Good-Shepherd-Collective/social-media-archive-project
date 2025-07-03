@@ -23,6 +23,26 @@ async def scrape_tweet_by_url(url: str):
         tweet = await api.tweet_details(tweet_id)
         
         if tweet:
+            # Extract media if available
+            media_data = []
+            if hasattr(tweet, 'media') and tweet.media:
+                for media_item in tweet.media:
+                    media_url = None
+                    if hasattr(media_item, 'variants') and media_item.variants:
+                        # Find the highest bitrate variant for videos
+                        best_variant = max(media_item.variants, key=lambda v: v.get('bitrate', 0) if v.get('bitrate') else 0)
+                        media_url = best_variant.get('url')
+                    elif hasattr(media_item, 'url'):
+                        media_url = media_item.url
+                    
+                    if media_url:
+                        media_data.append({
+                            'url': media_url,
+                            'type': media_item.type, # e.g., 'photo', 'video', 'animated_gif'
+                            'width': getattr(media_item, 'width', None),
+                            'height': getattr(media_item, 'height', None)
+                        })
+            
             tweet_data = {
                 'id': tweet.id,
                 'text': tweet.rawContent,
@@ -37,6 +57,7 @@ async def scrape_tweet_by_url(url: str):
                 'quote_count': tweet.quoteCount,
                 'view_count': getattr(tweet, 'viewCount', None),
                 'url': f"https://x.com/{tweet.user.username}/status/{tweet.id}",
+                'media': media_data, # Add media data to tweet
                 'scraped_at': str(datetime.now())
             }
             
@@ -47,6 +68,10 @@ async def scrape_tweet_by_url(url: str):
             print(f"👍 Likes: {tweet_data['like_count']}")
             print(f"🔄 Retweets: {tweet_data['retweet_count']}")
             print(f"💬 Replies: {tweet_data['reply_count']}")
+            if tweet_data['media']:
+                print(f"📷 Media files: {len(tweet_data['media'])}")
+                for i, media in enumerate(tweet_data['media']):
+                    print(f"   {i+1}. {media['type']}: {media['url']}")
             
             # Save to JSON
             filename = f"tweet_{tweet_id}.json"
