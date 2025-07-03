@@ -212,6 +212,27 @@ Just send me a tweet URL to get started!
                     "",
                 ]
                 
+                # Add media download links if available
+                if tweet_data.get('media'):
+                    media_links = []
+                    for i, media in enumerate(tweet_data.get('media', [])):
+                        if media.get('url'):
+                            media_type = media.get('type', 'media').lower()
+                            if media_type in ['photo', 'image']:
+                                icon = "🖼️"
+                            elif media_type in ['video', 'animated_gif']:
+                                icon = "🎥"
+                            else:
+                                icon = "📎"
+                            media_links.append(f"{icon} [Download {media_type.title()} {i+1}]({media['url']})")
+                    
+                    if media_links:
+                        response_parts.extend([
+                            "",
+                            "📥 Media Downloads:"
+                        ])
+                        response_parts.extend([f"  {link}" for link in media_links])
+
                 # Add file information
                 if file_urls:
                     if len(file_urls) == 1:
