@@ -85,3 +85,4 @@ accounts.db
 *.db
 scraped_data/
 telegram_old.py
+tweet_*.json
