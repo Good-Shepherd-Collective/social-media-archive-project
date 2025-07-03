@@ -141,14 +141,19 @@ Just send me a tweet URL to get started!
         if not any(domain in message_text.lower() for domain in ['twitter.com', 'x.com', 't.co']):
             await update.message.reply_text(
                 "🔗 Please send me a Twitter/X URL to scrape.\n\n"
-                "Example: https://twitter.com/user/status/123456"
+                "Examples:\n""  https://twitter.com/user/status/123456\n""  https://twitter.com/user/status/123456 #breaking #news\n\n""💡 Add hashtags for context (optional)!"
             )
             return
         
         # Process the tweet URL
-        await self.process_tweet_url(update, message_text)
+        # Extract URL and optional hashtags
+        tweet_url, hashtags = self.extract_url_and_hashtags(message_text)
+        username = update.effective_user.username or f"user_{update.effective_user.id}"
+        
+        # Process the tweet URL with optional hashtags
+        await self.process_tweet_url(update, tweet_url, hashtags, username)
     
-    async def process_tweet_url(self, update: Update, url: str):
+    async def process_tweet_url(self, update: Update, url: str, hashtags: list = None, username: str = "unknown"):
         """Process a tweet URL and scrape it"""
         try:
             # Send processing message
@@ -326,6 +331,28 @@ Just send me a tweet URL to get started!
         else:
             await self.run_polling()
 
+    
+    def extract_url_and_hashtags(self, message_text):
+        """Extract tweet URL and hashtags from message"""
+        import re
+        
+        # Find Twitter/X URLs
+        url_pattern = r'https?://(?:www\.)?(?:twitter\.com|x\.com|t\.co)/\S+'
+        url_match = re.search(url_pattern, message_text)
+        
+        if not url_match:
+            return message_text.strip(), []
+        
+        tweet_url = url_match.group(0)
+        
+        # Extract hashtags (# followed by word characters)
+        hashtag_pattern = r'#([\w]+)'
+        hashtags = re.findall(hashtag_pattern, message_text, re.IGNORECASE)
+        
+        # Clean hashtags (remove duplicates, lowercase)
+        hashtags = list(set([tag.lower() for tag in hashtags]))
+        
+        return tweet_url, hashtags
     
     async def serve_json_file(self, request):
         """Serve JSON files from the data directory"""
