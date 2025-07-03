@@ -5,8 +5,6 @@
 .env.staging
 *.key
 *.pem
-config.json
-secrets.json
 
 # Python
 __pycache__/
@@ -17,7 +15,6 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-downloads/
 eggs/
 .eggs/
 lib/
@@ -73,12 +70,6 @@ tmp/
 .Trashes
 ehthumbs.db
 Thumbs.db
-
-
-# API keys and tokens
-tokens.json
-api_keys.json
-credentials.json
 
 # Backup files
 *.bak
