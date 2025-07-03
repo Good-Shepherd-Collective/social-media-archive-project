@@ -37,6 +37,7 @@ class WebhookTwitterBot:
         self.webhook_port = int(os.getenv('WEBHOOK_PORT', '8443'))
         self.webhook_path = os.getenv('WEBHOOK_PATH', '/webhook')
         self.environment = os.getenv('BOT_ENVIRONMENT', 'development')
+        self.server_name = os.getenv("SERVER_NAME", "Unknown")
         
         if not self.bot_token:
             raise ValueError("TELEGRAM_BOT_TOKEN not found in environment variables")
@@ -170,7 +171,7 @@ Just send me a tweet URL to get started!
 **Likes:** {tweet_data.get('like_count', 0)} | **Retweets:** {tweet_data.get('retweet_count', 0)} | **Replies:** {tweet_data.get('reply_count', 0)}
 
 **Environment:** {self.environment}
-**Server:** {self.server_name if hasattr(self, 'server_name') else 'Unknown'}
+                **Server:** {self.server_name}
                 """
                 
                 # Edit the processing message
