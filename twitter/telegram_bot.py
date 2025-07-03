@@ -230,21 +230,25 @@ class TwitterScraperBot:
             if tweet_data:
                 # Get saved paths for display
                 saved_paths = tweet_data.get('saved_paths', [])
-                paths_display = "\\n".join([f"  • `{path}`" for path in saved_paths])
                 
                 # Send success message with tweet details
+                # Create a simple text message without complex markdown
                 success_msg = (
-                    f"✅ **Tweet scraped successfully\\!**\\n\\n"
-                    f"👤 **Author:** @{tweet_data['author']} \\({tweet_data['author_name']}\\)\\n"
-                    f"📅 **Date:** {tweet_data['created_at']}\\n"
-                    f"👍 **Likes:** {tweet_data['like_count']}\\n"
-                    f"🔄 **Retweets:** {tweet_data['retweet_count']}\\n"
-                    f"💬 **Replies:** {tweet_data['reply_count']}\\n\\n"
-                    f"**Text:**\\n{tweet_data['text'][:200]}{'\\.\\.\\.' if len(tweet_data['text']) > 200 else ''}\\n\\n"
-                    f"💾 **Saved to {len(saved_paths)} location\\(s\\):**\\n{paths_display}"
+                    f"✅ Tweet scraped successfully!\n\n"
+                    f"👤 Author: @{tweet_data['author']} ({tweet_data['author_name']})\n"
+                    f"📅 Date: {tweet_data['created_at']}\n"
+                    f"👍 Likes: {tweet_data['like_count']}\n"
+                    f"🔄 Retweets: {tweet_data['retweet_count']}\n"
+                    f"💬 Replies: {tweet_data['reply_count']}\n\n"
+                    f"Text: {tweet_data['text'][:200]}{'...' if len(tweet_data['text']) > 200 else ''}\n\n"
+                    f"💾 Saved to {len(saved_paths)} location(s):\n"
                 )
                 
-                await processing_msg.edit_text(success_msg, parse_mode='MarkdownV2')
+                # Add file paths without markdown formatting
+                for path in saved_paths:
+                    success_msg += f"  • {path}\n"
+                
+                await processing_msg.edit_text(success_msg)
             else:
                 await processing_msg.edit_text("❌ Failed to scrape tweet. It may be private or deleted.")
                 
