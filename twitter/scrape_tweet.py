@@ -25,23 +25,93 @@ async def scrape_tweet_by_url(url: str):
         if tweet:
             # Extract media if available
             media_data = []
-            if hasattr(tweet, 'media') and tweet.media:
-                for media_item in tweet.media:
-                    media_url = None
-                    if hasattr(media_item, 'variants') and media_item.variants:
-                        # Find the highest bitrate variant for videos
-                        best_variant = max(media_item.variants, key=lambda v: v.get('bitrate', 0) if v.get('bitrate') else 0)
-                        media_url = best_variant.get('url')
-                    elif hasattr(media_item, 'url'):
-                        media_url = media_item.url
+            print(f"🔍 Checking for media in tweet...")
+            print(f"   Tweet has 'media' attribute: {hasattr(tweet, 'media')}")
+            
+            if hasattr(tweet, 'media'):
+                print(f"   tweet.media value: {tweet.media}")
+                print(f"   tweet.media type: {type(tweet.media)}")
+                
+                if tweet.media:
+                    if hasattr(tweet.media, 'photos'):
+                        media_count = len(tweet.media.photos) + len(getattr(tweet.media, 'videos', [])) + len(getattr(tweet.media, 'animated', []))
+                        print(f"   Found {media_count} total media items")
+                        print(f"     Photos: {len(tweet.media.photos)}")
+                        print(f"     Videos: {len(getattr(tweet.media, 'videos', []))}")
+                        print(f"     Animated: {len(getattr(tweet.media, 'animated', []))}")
+                    else:
+                        print("   Media object structure unknown")
+                    # Process photos
+                    for i, media_item in enumerate(tweet.media.photos):
+                        print(f"   Photo {i+1}:")
+                        print(f"     Type: {getattr(media_item, 'type', 'unknown')}")
+                        print(f"     Has variants: {hasattr(media_item, 'variants')}")
+                        print(f"     Has url: {hasattr(media_item, 'url')}")
+                        
+                        media_url = None
+                        if hasattr(media_item, 'variants') and media_item.variants:
+                            print(f"     Variants count: {len(media_item.variants)}")
+                            # Find the highest bitrate variant for videos
+                            best_variant = max(media_item.variants, key=lambda v: v.get('bitrate', 0) if v.get('bitrate') else 0)
+                            media_url = best_variant.get('url')
+                            print(f"     Best variant URL: {media_url}")
+                        elif hasattr(media_item, 'url'):
+                            media_url = media_item.url
+                            print(f"     Direct URL: {media_url}")
+                        
+                        if media_url:
+                            media_info = {
+                                'url': media_url,
+                                'type': 'photo',  # This is from photos array
+                                'width': getattr(media_item, 'width', None),
+                                'height': getattr(media_item, 'height', None)
+                            }
+                            media_data.append(media_info)
+                            print(f"     Added to media_data: {media_info}")
+                        else:
+                            print(f"     No valid URL found for this photo")
                     
-                    if media_url:
-                        media_data.append({
-                            'url': media_url,
-                            'type': media_item.type, # e.g., 'photo', 'video', 'animated_gif'
-                            'width': getattr(media_item, 'width', None),
-                            'height': getattr(media_item, 'height', None)
-                        })
+                    # Process videos
+                    for i, media_item in enumerate(getattr(tweet.media, 'videos', [])):
+                        print(f"   Video {i+1}:")
+                        print(f"     Has variants: {hasattr(media_item, 'variants')}")
+                        
+                        media_url = None
+                        if hasattr(media_item, 'variants') and media_item.variants:
+                            print(f"     Variants count: {len(media_item.variants)}")
+                            best_variant = max(media_item.variants, key=lambda v: v.get('bitrate', 0) if v.get('bitrate') else 0)
+                            media_url = best_variant.get('url')
+                            print(f"     Best variant URL: {media_url}")
+                        
+                        if media_url:
+                            media_info = {
+                                'url': media_url,
+                                'type': 'video',
+                                'width': getattr(media_item, 'width', None),
+                                'height': getattr(media_item, 'height', None)
+                            }
+                            media_data.append(media_info)
+                            print(f"     Added to media_data: {media_info}")
+                    
+                    # Process animated GIFs
+                    for i, media_item in enumerate(getattr(tweet.media, 'animated', [])):
+                        print(f"   Animated GIF {i+1}:")
+                        media_url = getattr(media_item, 'url', None)
+                        if media_url:
+                            media_info = {
+                                'url': media_url,
+                                'type': 'animated_gif',
+                                'width': getattr(media_item, 'width', None),
+                                'height': getattr(media_item, 'height', None)
+                            }
+                            media_data.append(media_info)
+                            print(f"     Added to media_data: {media_info}")
+                else:
+                    print("   tweet.media is empty or falsy")
+            else:
+                print("   Tweet has no 'media' attribute")
+            
+            print(f"📊 Final media_data: {media_data}")
             
             tweet_data = {
                 'id': tweet.id,

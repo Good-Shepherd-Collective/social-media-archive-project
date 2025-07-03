@@ -155,6 +155,16 @@ Just send me a tweet URL to get started!
     
     async def process_tweet_url(self, update: Update, url: str, hashtags: list = None, username: str = "unknown"):
         """Process a tweet URL and scrape it"""
+        user_id = update.effective_user.id
+        
+        # Detailed logging start
+        logger.info(f"🔄 TWEET PROCESSING STARTED")
+        logger.info(f"   User: @{username} (ID: {user_id})")
+        logger.info(f"   URL: {url}")
+        logger.info(f"   Hashtags: {hashtags if hashtags else 'None'}")
+        logger.info(f"   Timestamp: {datetime.now()}")
+        logger.info(f"   Environment: {self.environment}")
+        
         try:
             # Send processing message
             processing_msg = await update.message.reply_text("🔄 Processing tweet...")
@@ -162,8 +172,20 @@ Just send me a tweet URL to get started!
             # Import and use the scraping logic
             from scrape_tweet import scrape_tweet_by_url
             
-            # Scrape the tweet
+            # Scrape the tweet (this should be a FRESH scrape)
+            logger.info(f"   Starting FRESH tweet scraping...")
             tweet_data = await scrape_tweet_by_url(url)
+            
+            if tweet_data:
+                logger.info(f"   ✅ Fresh scrape successful!")
+                logger.info(f"   Media count: {len(tweet_data.get('media', []))}")
+                if tweet_data.get('media'):
+                    for i, media in enumerate(tweet_data.get('media', [])):
+                        logger.info(f"   Media {i+1}: {media.get('type')} - {media.get('url')}")
+                else:
+                    logger.info(f"   No media found in tweet_data")
+            else:
+                logger.info(f"   ❌ Fresh scrape failed")
             
             if tweet_data:
                 # Check file locations and create response
