@@ -89,3 +89,34 @@ Required variables in `.env`:
 - Never commit your `.env` file to version control
 - Use the `.env.example` file as a template
 - Keep your credentials secure and rotate them regularly
+## Local Development Setup
+
+### Running the Bot Locally
+
+To avoid conflicts with the production bot running on the server, use the development bot:
+
+1. **Update your local configuration**:
+   ```bash
+   # Edit .env.local and add your Telegram user ID
+   TELEGRAM_AUTHORIZED_USERS=your_telegram_user_id_here
+   ```
+
+2. **Run the local development bot**:
+   ```bash
+   ./run_local.sh
+   ```
+
+3. **Test with the development bot**:
+   - Message @gsc_local_data_bot on Telegram
+   - Send `/start` to begin
+   - Send tweet URLs to test scraping functionality
+
+### Bot Tokens
+
+- **Production Bot**: Used on the server (configured in `.env`)
+- **Development Bot**: `@gsc_local_data_bot` (configured in `.env.local`)
+  - Token: `7907408099:AAHlifWl_r87Uju6WFzAnx1RS7OIWiX8xt4`
+  - Use this for local development and testing
+
+This setup prevents the "Conflict: terminated by other getUpdates request" error when running the bot locally while the production bot is running on the server.
+

@@ -15,8 +15,10 @@ from dotenv import load_dotenv
 from twscrape import API
 from storage_utils import storage_manager
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (support for different env files)
+env_file = os.getenv("ENV_FILE", ".env")
+load_dotenv(env_file)
+print(f"Loading environment from: {env_file}")
 
 # Configure logging
 logging.basicConfig(
