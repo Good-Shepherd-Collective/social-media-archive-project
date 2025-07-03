@@ -79,3 +79,9 @@ backup/
 # OpenSearch/Elasticsearch data
 opensearch_data/
 elasticsearch_data/
+
+# Project specific
+accounts.db
+*.db
+scraped_data/
+telegram_old.py
