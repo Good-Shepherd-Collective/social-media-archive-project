@@ -221,7 +221,7 @@ Just send me a tweet URL to get started!
                 response_text = "\n".join(response_parts)
                 
                 # Edit the processing message
-                await processing_msg.edit_text(response_text, parse_mode='Markdown')
+                await processing_msg.edit_text(response_text, )
                 
                 # Log the activity
                 logger.info(f"Tweet scraped successfully by user {update.effective_user.id}: {tweet_data.get('id')}")
