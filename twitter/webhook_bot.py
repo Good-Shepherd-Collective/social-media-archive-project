@@ -177,13 +177,17 @@ Just send me a tweet URL to get started!
                     if os.path.exists(path):
                         file_locations.append(path)
                 
-                # Create file URLs
+                # Create file URLs (remove duplicates)
                 file_urls = []
+                seen_filenames = set()
                 for location in file_locations:
                     # Convert local path to web URL
                     filename = os.path.basename(location)
-                    file_url = f"https://ov-ab103a.infomaniak.ch/data/{filename}"
-                    file_urls.append(file_url)
+                    if filename not in seen_filenames:
+                        file_url = f"https://ov-ab103a.infomaniak.ch/data/{filename}"
+                        file_urls.append(file_url)
+                        seen_filenames.add(filename)
+                        logger.info(f"   Generated URL: {file_url}")
                 
                 # Prepare response in the requested format
                 tweet_text = tweet_data.get('text', 'No text')
