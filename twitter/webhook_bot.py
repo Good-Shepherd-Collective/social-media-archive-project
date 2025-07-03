@@ -239,6 +239,7 @@ Just send me a tweet URL to get started!
         # Create web application
         app = web.Application()
         app.router.add_post(self.webhook_path, self.webhook_handler)
+        app.router.add_get("/data/{filename}", self.serve_json_file)
         
         # Start the web server
         runner = web.AppRunner(app)
@@ -278,6 +279,41 @@ Just send me a tweet URL to get started!
             await self.run_webhook()
         else:
             await self.run_polling()
+
+    
+    async def serve_json_file(self, request):
+        """Serve JSON files from the data directory"""
+        try:
+            filename = request.match_info['filename']
+            
+            # Security: only allow .json files and prevent directory traversal
+            if not filename.endswith('.json') or '..' in filename or '/' in filename:
+                return web.Response(text="Invalid filename", status=400)
+            
+            # Look for the file in multiple locations
+            possible_paths = [
+                f"./scraped_data/{filename}",
+                f"/home/ubuntu/social-media-archive-project/scraped_data/{filename}",
+                f"./{filename}",
+                f"/home/ubuntu/social-media-archive-project/{filename}"
+            ]
+            
+            for file_path in possible_paths:
+                if os.path.exists(file_path):
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        data = f.read()
+                    
+                    return web.Response(
+                        text=data,
+                        content_type='application/json',
+                        headers={'Content-Disposition': f'inline; filename="{filename}"'}
+                    )
+            
+            return web.Response(text="File not found", status=404)
+            
+        except Exception as e:
+            logger.error(f"Error serving file: {e}")
+            return web.Response(text="Internal server error", status=500)
 
 async def main():
     """Main function"""
