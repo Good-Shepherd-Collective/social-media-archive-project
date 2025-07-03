@@ -132,17 +132,16 @@ class TwitterScraperBot:
         storage_info = storage_manager.get_environment_info()
         
         await update.message.reply_text(
-            "🐦 **Twitter Scraper Bot**\\n\\n"
-            "Send me a Twitter/X URL and I'll scrape it for you\\!\\n\\n"
-            "**Commands:**\\n"
-            "/start \\- Show this help message\\n"
-            "/status \\- Check bot status\\n"
-            "/storage \\- Show storage configuration\\n\\n"
-            "**Usage:**\\n"
-            "Just send a tweet URL like:\\n"
-            "`https://x.com/username/status/123456789`\\n\\n"
-            f"**Storage:** {storage_info}",
-            parse_mode='MarkdownV2'
+            "🐦 Twitter Scraper Bot\n\n"
+            "Send me a Twitter/X URL and I'll scrape it for you!\n\n"
+            "Commands:\n"
+            "/start - Show this help message\n"
+            "/status - Check bot status\n"
+            "/storage - Show storage configuration\n\n"
+            "Usage:\n"
+            "Just send a tweet URL like:\n"
+            "https://x.com/username/status/123456789\n\n"
+            f"Storage: {storage_info}"
         )
     
     async def storage_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -226,6 +225,9 @@ class TwitterScraperBot:
         processing_msg = await update.message.reply_text("🔄 Scraping tweet...")
         
         try:
+            # Add a small delay so user can see the processing message
+            await asyncio.sleep(0.5)
+            
             # Scrape the tweet
             tweet_data = await self.scrape_tweet(tweet_url)
             
