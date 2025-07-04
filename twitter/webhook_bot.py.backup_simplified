@@ -1,0 +1,464 @@
+"""
+Multi-Platform Social Media Archive Bot
+Enhanced to support Twitter, Instagram, Facebook, TikTok, and future platforms
+"""
+
+import asyncio
+import logging
+import os
+import json
+from datetime import datetime
+from aiohttp import web
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from dotenv import load_dotenv
+from twscrape import API
+import sys
+
+# Add parent directory to path for platform manager
+sys.path.append('..')
+
+from storage_utils import storage_manager
+from bot.platform_manager import platform_manager
+
+# Load environment variables
+load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Bot configuration
+BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+WEBHOOK_URL = os.getenv('WEBHOOK_URL', 'https://ov-ab103a.infomaniak.ch/webhook')
+WEBHOOK_PORT = int(os.getenv('WEBHOOK_PORT', '8443'))
+
+class MultiPlatformBot:
+    def __init__(self):
+        self.application = None
+        self.supported_platforms = platform_manager.get_supported_platforms()
+        
+    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /start command with multi-platform welcome"""
+        welcome_message = f"""
+🎉 **Multi-Platform Social Media Archive Bot**
+
+I can archive content from multiple social media platforms!
+
+**📱 Currently Supported:**
+{self._format_platform_list(self.supported_platforms)}
+
+**🔧 How to use:**
+1. Send me a URL from any supported platform
+2. Add hashtags for context (optional)
+3. I'll archive the content with media download and self-hosting
+
+**💡 Examples:**
+• `https://twitter.com/user/status/123456 #breaking #news`
+• `https://instagram.com/p/ABC123/ #photography`
+• `https://facebook.com/user/posts/456789 #social`
+
+**🎯 Features:**
+✅ **Media Download**: All images/videos downloaded and self-hosted
+✅ **User Attribution**: Tracks who archived what content
+✅ **Search**: Full-text search across all platforms
+✅ **Hashtags**: Custom tagging system
+
+**Storage:** {storage_manager.get_storage_info()}
+
+Ready to archive some content! 🚀
+"""
+        await update.message.reply_text(welcome_message, parse_mode='Markdown')
+
+    def _format_platform_list(self, platforms):
+        """Format platform list for display"""
+        platform_icons = {
+            'twitter': '🐦 Twitter/X',
+            'instagram': '📸 Instagram',
+            'facebook': '📘 Facebook',
+            'tiktok': '🎵 TikTok'
+        }
+        
+        lines = []
+        for platform in platforms:
+            icon_name = platform_icons.get(platform, f"📱 {platform.title()}")
+            lines.append(f"  ✅ {icon_name}")
+        
+        # Add coming soon platforms
+        all_platforms = ['twitter', 'instagram', 'facebook', 'tiktok']
+        coming_soon = [p for p in all_platforms if p not in platforms]
+        
+        for platform in coming_soon:
+            icon_name = platform_icons.get(platform, f"📱 {platform.title()}")
+            lines.append(f"  🔄 {icon_name} (Coming Soon)")
+        
+        return '\n'.join(lines)
+
+    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Enhanced help command with platform-specific examples"""
+        help_text = f"""
+📚 **Multi-Platform Archive Bot Help**
+
+**🌐 Supported Platforms & URL Formats:**
+
+🐦 **Twitter/X:**
+  • `https://twitter.com/user/status/123456`
+  • `https://x.com/user/status/123456`
+  • `https://t.co/shorturl`
+
+📸 **Instagram:**
+  • `https://instagram.com/p/ABC123/`
+  • `https://instagram.com/reel/XYZ789/`
+  • `https://instagram.com/tv/DEF456/`
+
+📘 **Facebook:** (Coming Soon)
+  • `https://facebook.com/user/posts/123456`
+  • `https://fb.com/user/posts/123456`
+
+🎵 **TikTok:** (Coming Soon)
+  • `https://tiktok.com/@user/video/123456`
+  • `https://vm.tiktok.com/shorturl`
+
+**📝 Usage Examples:**
+```
+https://twitter.com/user/status/123 #breaking #news
+https://instagram.com/p/ABC123/ #art #photography
+Just paste any supported URL with optional hashtags!
+```
+
+**⚙️ Current Configuration:**
+• **Platforms Active:** {len(self.supported_platforms)}
+• **Storage:** {storage_manager.get_storage_info()}
+• **Media Download:** Enabled with self-hosting
+
+**🆘 Need help?** Just send any supported social media URL!
+"""
+        await update.message.reply_text(help_text)
+
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Enhanced message handler with multi-platform support"""
+        message_text = update.message.text
+        user = update.effective_user
+        
+        # Create user context for attribution
+        user_context = {
+            'user_id': user.id,
+            'username': user.username or f"user_{user.id}",
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'notes': None
+        }
+        
+        logger.info("🔄 SOCIAL MEDIA POST PROCESSING STARTED")
+        logger.info(f"   User: @{user_context['username']} (ID: {user_context['user_id']})")
+        logger.info(f"   Message: {message_text[:100]}...")
+        logger.info(f"   User Context: {user_context}")
+        logger.info(f"   Timestamp: {datetime.now()}")
+        logger.info(f"   Environment: {os.getenv('ENVIRONMENT', 'production')}")
+
+        # Extract URL and hashtags
+        words = message_text.split()
+        url = None
+        hashtags = []
+        
+        # Find URL and hashtags
+        for word in words:
+            if word.startswith('http'):
+                url = word
+            elif word.startswith('#'):
+                hashtags.append(word)
+        
+        if not url:
+            # Send platform-specific help
+            await self._send_platform_help(update)
+            return
+        
+        # Detect platform
+        detected_platform = platform_manager.detect_platform(url)
+        
+        if not detected_platform:
+            await update.message.reply_text(
+                f"❌ **Unsupported URL**\n\n"
+                f"I don't recognize this social media platform.\n\n"
+                f"**✅ Supported platforms:**\n{self._format_platform_list(self.supported_platforms)}\n\n"
+                f"Please send a URL from one of the supported platforms.",
+                parse_mode='Markdown'
+            )
+            return
+        
+        # Check if platform is implemented
+        if detected_platform not in self.supported_platforms:
+            await update.message.reply_text(
+                f"🔄 **Platform Detected: {detected_platform.title()}**\n\n"
+                f"I recognize this as a {detected_platform.title()} URL, but support for this platform "
+                f"is not yet implemented.\n\n"
+                f"**✅ Currently available:**\n{self._format_platform_list(self.supported_platforms)}\n\n"
+                f"📋 {detected_platform.title()} support is planned for future releases!",
+                parse_mode='Markdown'
+            )
+            return
+
+        # Process the URL
+        try:
+            # Send processing message
+            processing_msg = await update.message.reply_text(
+                f"🔄 **Processing {detected_platform.title()} content...**\n\n"
+                f"📱 Platform: {detected_platform.title()}\n"
+                f"🔗 URL: {url}\n"
+                f"#️⃣ Hashtags: {' '.join(hashtags) if hashtags else 'None'}"
+            )
+            
+            logger.info(f"   🎯 Platform detected: {detected_platform}")
+            logger.info(f"   🔗 URL: {url}")
+            logger.info(f"   #️⃣ Hashtags: {hashtags}")
+            
+            # Use platform manager to scrape
+            logger.info(f"   🚀 Starting {detected_platform} scraping...")
+            
+            if detected_platform == 'twitter':
+                # Use existing Twitter scraping logic for backward compatibility
+                from scrape_tweet import scrape_tweet_by_url
+                post_data = await scrape_tweet_by_url(url, hashtags, user_context)
+                
+                if post_data:
+                    await self._send_success_response(update, post_data, detected_platform, processing_msg)
+                else:
+                    await self._send_error_response(update, detected_platform, "No data returned", processing_msg)
+                    
+            else:
+                # Use platform manager for other platforms
+                scraper = platform_manager.get_scraper(detected_platform)
+                if scraper:
+                    # Convert user_context to UserContext object
+                    from core.data_models import UserContext
+                    user_ctx = UserContext(
+                        telegram_user_id=user_context['user_id'],
+                        telegram_username=user_context['username'],
+                        first_name=user_context['first_name'],
+                        last_name=user_context['last_name'],
+                        notes=user_context['notes']
+                    )
+                    
+                    # Add hashtags to user context
+                    user_ctx.notes = f"Hashtags: {' '.join(hashtags)}" if hashtags else None
+                    
+                    # Scrape the post
+                    post = await scraper.scrape_post(url, user_ctx)
+                    
+                    if post:
+                        # Save using unified storage manager
+                        from core.storage_manager import storage_manager as unified_storage
+                        saved_paths = await unified_storage.save_post(post)
+                        
+                        # Convert to dict for response
+                        post_data = post.to_dict()
+                        post_data['user_hashtags'] = hashtags
+                        
+                        await self._send_success_response(update, post_data, detected_platform, processing_msg)
+                    else:
+                        await self._send_error_response(update, detected_platform, "No data returned", processing_msg)
+                else:
+                    await self._send_error_response(update, detected_platform, "Scraper not available", processing_msg)
+                    
+        except Exception as e:
+            logger.error(f"❌ Error processing {detected_platform} content: {e}")
+            await self._send_error_response(update, detected_platform, str(e), processing_msg)
+
+    async def _send_platform_help(self, update: Update):
+        """Send platform-specific help message"""
+        help_message = f"""
+🔗 **Please send me a social media URL to archive!**
+
+**📱 Supported Platforms:**
+{self._format_platform_list(self.supported_platforms)}
+
+**💡 Examples:**
+• `https://twitter.com/user/status/123456 #news`
+• `https://instagram.com/p/ABC123/ #photography`
+
+**✨ Features:**
+✅ Media download and self-hosting
+✅ User attribution tracking  
+✅ Custom hashtag support
+✅ Full-text search capability
+
+Just paste any supported URL with optional hashtags!
+"""
+        await update.message.reply_text(help_message, parse_mode='Markdown')
+
+    async def _send_success_response(self, update: Update, post_data, platform, processing_msg):
+        """Send success response with post information"""
+        try:
+            # Basic post info
+            post_id = post_data.get('id', 'Unknown')
+            author = post_data.get('author', 'Unknown')
+            text_preview = (post_data.get('text', '') or '')[:100]
+            if len(text_preview) == 100:
+                text_preview += "..."
+            
+            # Media information
+            media_info = ""
+            media_list = post_data.get('media', [])
+            if media_list:
+                media_info = f"\n\n🖼️ **Media ({len(media_list)} files):**"
+                for i, media in enumerate(media_list[:3]):  # Show max 3 media items
+                    media_type = media.get('type', 'unknown')
+                    original_url = media.get('url', '')
+                    hosted_url = media.get('hosted_url', '')
+                    file_size = media.get('file_size', 0)
+                    
+                    size_str = f" ({file_size:,} bytes)" if file_size else ""
+                    
+                    if hosted_url:
+                        media_info += f"\n  📁 {media_type.title()} {i+1}: [Self-hosted]({hosted_url}){size_str}"
+                    else:
+                        media_info += f"\n  🔗 {media_type.title()} {i+1}: [Original]({original_url}){size_str}"
+                
+                if len(media_list) > 3:
+                    media_info += f"\n  ... and {len(media_list) - 3} more files"
+            
+            # Hashtags info
+            hashtag_info = ""
+            user_hashtags = post_data.get('user_hashtags', [])
+            scraped_hashtags = post_data.get('scraped_hashtags', [])
+            
+            if user_hashtags or scraped_hashtags:
+                hashtag_info = "\n\n🏷️ **Tags:**"
+                if user_hashtags:
+                    hashtag_info += f"\n  👤 Added: {' '.join(user_hashtags)}"
+                if scraped_hashtags:
+                    hashtag_info += f"\n  🤖 Extracted: {' '.join(scraped_hashtags)}"
+            
+            # Success message with safe formatting
+            try:
+                # Escape special characters for Markdown
+                safe_author = re.sub(r'([_*\[\]()~`>#+-=|{}.!])', r'\\\1', str(author))
+                safe_post_id = re.sub(r'([_*\[\]()~`>#+-=|{}.!])', r'\\\1', str(post_id))
+                safe_text = re.sub(r'([_*\[\]()~`>#+-=|{}.!])', r'\\\1', str(text_preview))
+                
+                success_message = f"""✅ **{platform.title()} Content Archived!**
+
+👤 **Author:** {safe_author}
+🆔 **Post ID:** {safe_post_id}
+📝 **Content:** {safe_text}
+{media_info}
+{hashtag_info}
+
+🌐 **View:** {post_data.get('url', 'N/A')}
+
+🎯 **Status:** Successfully archived with user attribution!"""
+                
+                await processing_msg.edit_text(success_message, parse_mode='Markdown', disable_web_page_preview=True)
+            except Exception as format_error:
+                # Fallback to plain text if Markdown fails
+                simple_message = f"✅ {platform.title()} content archived successfully!\n\nAuthor: {author}\nPost ID: {post_id}\nContent: {text_preview[:100]}..."
+                await processing_msg.edit_text(simple_message)
+            
+        except Exception as e:
+            logger.error(f"Error sending success response: {e}")
+            await processing_msg.edit_text(f"✅ {platform.title()} content archived successfully! (Error formatting response)")
+
+    async def _send_error_response(self, update: Update, platform, error, processing_msg):
+        """Send error response"""
+        error_message = f"""
+❌ **{platform.title()} Archive Failed**
+
+**Error:** {error}
+
+**🔧 What you can try:**
+• Check if the URL is accessible and public
+• Try again in a few minutes (rate limiting)
+• Ensure the post still exists
+
+**💡 Need help?** Send /help for supported formats.
+"""
+        
+        await processing_msg.edit_text(error_message, parse_mode='Markdown')
+
+    async def webhook_handler(self, request):
+        """Handle incoming webhook requests"""
+        try:
+            body = await request.text()
+            update = Update.de_json(json.loads(body), self.application.bot)
+            await self.application.process_update(update)
+            return web.Response(text="OK")
+        except Exception as e:
+            logger.error(f"Webhook error: {e}")
+            return web.Response(text="Error", status=500)
+
+    async def setup_webhook(self):
+        """Setup webhook with Telegram"""
+        try:
+            await self.application.bot.set_webhook(
+                url=WEBHOOK_URL,
+                allowed_updates=["message"]
+            )
+            logger.info(f"Webhook set to: {WEBHOOK_URL}")
+        except Exception as e:
+            logger.error(f"Failed to set webhook: {e}")
+            raise
+
+    async def start_bot(self):
+        """Start the multi-platform bot"""
+        logger.info("Starting bot in WEBHOOK mode")
+        
+        # Create application
+        self.application = Application.builder().token(BOT_TOKEN).build()
+        
+        # Add handlers
+        self.application.add_handler(CommandHandler("start", self.start_command))
+        self.application.add_handler(CommandHandler("help", self.help_command))
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+        
+        # Initialize application
+        await self.application.initialize()
+        await self.application.start()
+        
+        # Setup webhook
+        await self.setup_webhook()
+        
+        # Create web server
+        app = web.Application()
+        app.router.add_post("/webhook", self.webhook_handler)
+        
+        # Add health check
+        async def health_check(request):
+            platform_status = {
+                'supported_platforms': self.supported_platforms,
+                'platform_count': len(self.supported_platforms),
+                'storage_info': storage_manager.get_storage_info(),
+                'status': 'healthy'
+            }
+            return web.json_response(platform_status)
+        
+        app.router.add_get("/health", health_check)
+        
+        # Start server
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', WEBHOOK_PORT)
+        await site.start()
+        
+        logger.info(f"Webhook server started on port {WEBHOOK_PORT}")
+        logger.info(f"Multi-platform support: {', '.join(self.supported_platforms)}")
+        
+        # Keep running
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("Bot stopped by user")
+        finally:
+            await self.application.stop()
+            await runner.cleanup()
+
+# Create and run bot
+async def main():
+    bot = MultiPlatformBot()
+    await bot.start_bot()
+
+if __name__ == "__main__":
+    asyncio.run(main())
