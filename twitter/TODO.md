@@ -1,50 +1,90 @@
-# TODO - Twitter Scraper Project
+# TODO - Social Media Archive Project
+
+## Recently Completed (Latest Updates)
+- ✅ **Fixed hashtag inclusion in JSON files** - Hashtags now saved to both database and JSON
+- ✅ **Fixed Python bytecode caching issues** - Implemented proper cache clearing workflow
+- ✅ **Enhanced storage_utils.py** - Now properly handles both user_hashtags and scraped_hashtags
+- ✅ **Fixed syntax errors in scrape_tweet.py** - Resolved f-string and code structure issues
+- ✅ **Verified database integration** - Confirmed hashtags and media saving correctly to PostgreSQL
 
 ## Current Status (Working Features)
-- ✅ Hashtag extraction from scraped tweets (working well)
-- ✅ Photo media extraction and logging (working reliably)
+- ✅ Hashtag extraction from scraped tweets (working perfectly)
+- ✅ Photo and video media extraction (improved reliability)
 - ✅ PostgreSQL database integration with full-text search
-- ✅ User hashtag support in database schema
+- ✅ User hashtag support in both database and JSON files
 - ✅ Telegram bot webhook integration
-- ✅ Tweet caching to avoid re-scraping
+- ✅ Tweet caching with proper fresh scraping
 - ✅ Comprehensive logging for debugging
 - ✅ Environment configuration for production deployment
+- ✅ Enhanced storage manager with dual JSON/database saving
 
-## Issues to Fix
-- ❌ Video media extraction is unreliable (sometimes fails due to tweet restrictions)
-- ❌ Cached data sometimes missing hashtags/media in responses
-- ❌ Some tweets fail to scrape due to Twitter API access restrictions/rate limiting
-- ❌ Complex media object handling needs improvement (photos/videos/gifs arrays)
-- ❌ Video download links not properly added to bot responses
+## Priority Tasks
 
-## Next Steps
-1. **Improve video extraction reliability**
-   - Better error handling for restricted tweets
-   - Implement fallback mechanisms for video access
-   - Test with various video tweet types
+### 1. **Add User Attribution to Data** 🔴 HIGH PRIORITY
+- Add the Telegram user ID who submitted each tweet to the database
+- Include user attribution in JSON files
+- Track which user scraped each piece of content
+- Update database schema if needed to include user tracking
 
-2. **Enhance media response formatting**
-   - Add proper icons for different media types
-   - Implement video download links in bot responses
-   - Better handling of animated GIFs
+### 2. **Make System Modular for Multi-Platform Support** 🔴 HIGH PRIORITY
+- Refactor code to support multiple social media platforms
+- Create platform-agnostic interfaces for:
+  - Facebook posts
+  - Instagram posts  
+  - TikTok videos
+  - Twitter/X tweets
+- Organize code structure to easily add new platforms
+- Create common data models and storage patterns
 
-3. **Cache management improvements**
-   - Implement cache invalidation strategy
-   - Add cache refresh mechanisms
-   - Better handling of stale cached data
+## Ongoing Issues to Monitor
+- ⚠️ Video media extraction occasionally fails due to Twitter API restrictions
+- ⚠️ Some tweets fail to scrape due to rate limiting (but error handling is good)
+- ⚠️ Complex media handling could be further optimized
 
-4. **Error handling and resilience**
-   - Better handling of API rate limits
-   - Implement retry mechanisms
-   - More graceful degradation when features fail
+## Next Development Phases
 
-5. **Testing and validation**
-   - Test with various tweet types (photos, videos, threads)
-   - Validate hashtag extraction across different tweet formats
-   - Performance testing with high-volume scraping
+### Phase 1: User Attribution & Modularity
+1. **User tracking implementation**
+   - Add user_id field to database tables
+   - Include user context in all scraping operations
+   - Update bot to pass user information to storage layer
+
+2. **Platform modularity refactoring**
+   - Create base classes for social media scrapers
+   - Standardize data models across platforms
+   - Implement plugin architecture for new platforms
+
+### Phase 2: Multi-Platform Support
+1. **Facebook integration**
+   - Implement Facebook post scraping
+   - Handle Facebook media types
+   - Create Facebook-specific bot commands
+
+2. **Instagram integration**
+   - Implement Instagram post/story scraping
+   - Handle Instagram media formats
+   - Create Instagram-specific workflows
+
+3. **TikTok integration**
+   - Implement TikTok video scraping
+   - Handle TikTok-specific metadata
+   - Create TikTok-specific bot interactions
+
+### Phase 3: Advanced Features
+1. **Enhanced search and filtering**
+2. **Bulk import/export capabilities**
+3. **Advanced analytics and reporting**
+4. **API for external integrations**
+
+## Technical Architecture Goals
+- **Modular design**: Easy to add new platforms
+- **Consistent interfaces**: Same bot commands work across platforms
+- **Unified storage**: Common database schema for all platforms
+- **Scalable infrastructure**: Support for high-volume usage
+- **Maintainable code**: Clear separation of concerns
 
 ## Notes
-- The system is production-ready for basic tweet scraping with photos and hashtags
-- Video extraction needs significant work before being reliable
-- Database schema supports all planned features
-- Bot infrastructure is solid and scalable
+- Current Twitter implementation is stable and production-ready
+- Foundation is solid for expanding to other platforms
+- Database schema designed to accommodate multi-platform data
+- Bot infrastructure can easily support additional commands and platforms

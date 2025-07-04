@@ -174,7 +174,7 @@ Just send me a tweet URL to get started!
             
             # Scrape the tweet (this should be a FRESH scrape)
             logger.info(f"   Starting FRESH tweet scraping...")
-            tweet_data = await scrape_tweet_by_url(url)
+            tweet_data = await scrape_tweet_by_url(url, hashtags)
             
             if tweet_data:
                 logger.info(f"   ✅ Fresh scrape successful!")

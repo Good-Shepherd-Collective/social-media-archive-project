@@ -143,15 +143,12 @@ async def scrape_tweet_by_url(url: str, user_hashtags: list = None):
                 for i, media in enumerate(tweet_data['media']):
                     print(f"   {i+1}. {media['type']}: {media['url']}")
             
-            # Save using storage manager (JSON + Database)
-            from storage_utils import storage_manager
-            saved_paths = storage_manager.save_tweet_data(tweet_data, str(tweet_id), user_hashtags)
+            # Save to JSON
+            filename = f"tweet_{tweet_id}.json"
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(tweet_data, f, indent=2, ensure_ascii=False)
             
-            if saved_paths:
-                print(f"\n💾 Tweet saved to: {', '.join(saved_paths)}")
-            else:
-                print("\n❌ Failed to save tweet data")
-                
+            print(f"\n💾 Tweet saved to: {filename}")
             return tweet_data
             
         else:
