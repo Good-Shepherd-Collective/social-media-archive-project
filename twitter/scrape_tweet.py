@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-async def scrape_tweet_by_url(url: str, user_hashtags: list = None):
+async def scrape_tweet_by_url(url: str, user_hashtags: list = None, user_context: dict = None):
     api = API()
     
     # Extract tweet ID from URL
@@ -131,6 +131,12 @@ async def scrape_tweet_by_url(url: str, user_hashtags: list = None):
                 'scraped_at': str(datetime.now())
             }
             
+            # Add user attribution if provided
+            if user_context:
+                tweet_data['scraped_by_user'] = user_context.get('username', 'unknown')
+                tweet_data['scraped_by_user_id'] = user_context.get('user_id')
+                tweet_data['user_notes'] = user_context.get('notes')
+            
             print("✅ Tweet scraped successfully!")
             print(f"📝 Author: @{tweet_data['author']} ({tweet_data['author_name']})")
             print(f"📅 Date: {tweet_data['created_at']}")
@@ -145,7 +151,7 @@ async def scrape_tweet_by_url(url: str, user_hashtags: list = None):
             
             # Save using storage manager (JSON + Database)
             from storage_utils import storage_manager
-            saved_paths = storage_manager.save_tweet_data(tweet_data, str(tweet_id), user_hashtags)
+            saved_paths = storage_manager.save_tweet_data(tweet_data, str(tweet_id), user_hashtags, user_context)
             
             if saved_paths:
                 print(f"\n💾 Tweet saved to: {', '.join(saved_paths)}")

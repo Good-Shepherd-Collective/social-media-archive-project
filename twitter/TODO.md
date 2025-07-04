@@ -1,6 +1,12 @@
 # TODO - Social Media Archive Project
 
 ## Recently Completed (Latest Updates)
+- ✅ **Implemented User Attribution System** - Complete user tracking for all scraped content
+  - Added Telegram user ID and username tracking to database
+  - Updated JSON files to include user context information
+  - Added user attribution to hashtags (who added which hashtag)
+  - Created migration script for existing databases
+  - Added comprehensive test suite for user attribution
 - ✅ **Fixed hashtag inclusion in JSON files** - Hashtags now saved to both database and JSON
 - ✅ **Fixed Python bytecode caching issues** - Implemented proper cache clearing workflow
 - ✅ **Enhanced storage_utils.py** - Now properly handles both user_hashtags and scraped_hashtags
@@ -8,6 +14,7 @@
 - ✅ **Verified database integration** - Confirmed hashtags and media saving correctly to PostgreSQL
 
 ## Current Status (Working Features)
+- ✅ **Complete User Attribution System** - Track which Telegram user scraped each tweet
 - ✅ Hashtag extraction from scraped tweets (working perfectly)
 - ✅ Photo and video media extraction (improved reliability)
 - ✅ PostgreSQL database integration with full-text search
@@ -20,11 +27,14 @@
 
 ## Priority Tasks
 
-### 1. **Add User Attribution to Data** 🔴 HIGH PRIORITY
-- Add the Telegram user ID who submitted each tweet to the database
-- Include user attribution in JSON files
-- Track which user scraped each piece of content
-- Update database schema if needed to include user tracking
+### 1. **~~Add User Attribution to Data~~** ✅ COMPLETED
+- ✅ Added Telegram user ID and username to database (tweets.scraped_by_user_id)
+- ✅ Included user attribution in JSON files (user_context field)
+- ✅ Track which user scraped each piece of content
+- ✅ Updated database schema with user tracking fields
+- ✅ Added user attribution to hashtags (who added which hashtag)
+- ✅ Created migration script for existing installations
+- ✅ Comprehensive test suite for user attribution functionality
 
 ### 2. **Make System Modular for Multi-Platform Support** 🔴 HIGH PRIORITY
 - Refactor code to support multiple social media platforms
@@ -43,11 +53,11 @@
 
 ## Next Development Phases
 
-### Phase 1: User Attribution & Modularity
-1. **User tracking implementation**
-   - Add user_id field to database tables
-   - Include user context in all scraping operations
-   - Update bot to pass user information to storage layer
+### Phase 1: ~~User Attribution~~ & Modularity
+1. **~~User tracking implementation~~** ✅ COMPLETED
+   - ✅ Added user_id field to database tables
+   - ✅ Include user context in all scraping operations
+   - ✅ Updated bot to pass user information to storage layer
 
 2. **Platform modularity refactoring**
    - Create base classes for social media scrapers

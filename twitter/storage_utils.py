@@ -45,7 +45,7 @@ class StorageManager:
         
         return paths
     
-    def save_to_database(self, tweet_data: Dict[Any, Any], user_hashtags: List[str] = None) -> bool:
+    def save_to_database(self, tweet_data: Dict[Any, Any], user_hashtags: List[str] = None, user_context: dict = None) -> bool:
         """Save tweet data to PostgreSQL database"""
         if not self.use_database:
             return False
@@ -80,11 +80,14 @@ class StorageManager:
                 'platform': 'twitter',
                 'scraped_by_user': tweet_data.get('scraped_by_user'),
                 'user_notes': tweet_data.get('user_notes'),
-                'raw_data': Json(tweet_data),
-                'user_hashtags': user_hashtags or [],
-                'scraped_hashtags': scraped_hashtags,
-                'media': Json(tweet_data.get('media', []))
+                'raw_data': Json(tweet_data)
             }
+            
+            # Add user context data if provided
+            if user_context:
+                insert_data['scraped_by_user'] = user_context.get('username', tweet_data.get('scraped_by_user'))
+                insert_data['scraped_by_user_id'] = user_context.get('user_id')
+                insert_data['user_notes'] = user_context.get('notes', tweet_data.get('user_notes'))
             
             # Insert or update tweet
             insert_query = """
@@ -92,12 +95,12 @@ class StorageManager:
                     id, text, author, author_name, author_followers, author_verified,
                     created_at, scraped_at, retweet_count, like_count, reply_count, 
                     quote_count, view_count, original_url, platform, scraped_by_user,
-                    user_notes, raw_data, user_hashtags, scraped_hashtags, media
+                    scraped_by_user_id, user_notes, raw_data
                 ) VALUES (
                     %(id)s, %(text)s, %(author)s, %(author_name)s, %(author_followers)s, %(author_verified)s,
                     %(created_at)s, %(scraped_at)s, %(retweet_count)s, %(like_count)s, %(reply_count)s,
                     %(quote_count)s, %(view_count)s, %(original_url)s, %(platform)s, %(scraped_by_user)s,
-                    %(user_notes)s, %(raw_data)s, %(user_hashtags)s, %(scraped_hashtags)s, %(media)s
+                    %(scraped_by_user_id)s, %(user_notes)s, %(raw_data)s
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     text = EXCLUDED.text,
@@ -115,14 +118,54 @@ class StorageManager:
                     original_url = EXCLUDED.original_url,
                     platform = EXCLUDED.platform,
                     scraped_by_user = EXCLUDED.scraped_by_user,
+                    scraped_by_user_id = EXCLUDED.scraped_by_user_id,
                     user_notes = EXCLUDED.user_notes,
-                    raw_data = EXCLUDED.raw_data,
-                    user_hashtags = EXCLUDED.user_hashtags,
-                    scraped_hashtags = EXCLUDED.scraped_hashtags,
-                    media = EXCLUDED.media;
+                    raw_data = EXCLUDED.raw_data;
             """
             
             cursor.execute(insert_query, insert_data)
+            
+            # Handle hashtags separately
+            tweet_id = tweet_data.get('id')
+            
+            # Insert user hashtags
+            if user_hashtags:
+                user_who_added = user_context.get('username') if user_context else None
+                user_id_who_added = user_context.get('user_id') if user_context else None
+                for hashtag in user_hashtags:
+                    hashtag_query = """
+                        INSERT INTO user_hashtags (tweet_id, hashtag, added_by, added_by_user_id)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT DO NOTHING;
+                    """
+                    cursor.execute(hashtag_query, (tweet_id, hashtag, user_who_added, user_id_who_added))
+            
+            # Insert scraped hashtags
+            if scraped_hashtags:
+                for hashtag in scraped_hashtags:
+                    hashtag_query = """
+                        INSERT INTO tweet_hashtags (tweet_id, hashtag)
+                        VALUES (%s, %s)
+                        ON CONFLICT DO NOTHING;
+                    """
+                    cursor.execute(hashtag_query, (tweet_id, hashtag))
+            
+            # Insert media files
+            if tweet_data.get('media'):
+                for media in tweet_data.get('media', []):
+                    media_query = """
+                        INSERT INTO media_files (tweet_id, media_type, original_url, width, height)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT DO NOTHING;
+                    """
+                    cursor.execute(media_query, (
+                        tweet_id,
+                        media.get('type'),
+                        media.get('url'),
+                        media.get('width'),
+                        media.get('height')
+                    ))
+            
             conn.commit()
             
             cursor.close()
@@ -135,16 +178,24 @@ class StorageManager:
             logger.error(f"Failed to save tweet {tweet_data.get('id')} to database: {e}")
             return False
     
-    def save_tweet_data(self, tweet_data: Dict[Any, Any], tweet_id: str, user_hashtags: List[str] = None) -> List[str]:
+    def save_tweet_data(self, tweet_data: Dict[Any, Any], tweet_id: str, user_hashtags: List[str] = None, user_context: dict = None) -> List[str]:
         """Save tweet data to appropriate location(s) based on environment"""
         filename = f"tweet_{tweet_id}.json"
         paths = self.get_storage_paths(filename)
         saved_paths = []
         
-        # Add hashtags to tweet data before saving to JSON
+        # Add hashtags and user context to tweet data before saving to JSON
         enhanced_tweet_data = tweet_data.copy()
         if user_hashtags:
             enhanced_tweet_data['user_hashtags'] = user_hashtags
+        
+        # Add user context data for JSON storage
+        if user_context:
+            enhanced_tweet_data['user_context'] = {
+                'telegram_user_id': user_context.get('user_id'),
+                'telegram_username': user_context.get('username'),
+                'added_notes': user_context.get('notes')
+            }
         
         # Extract scraped hashtags from tweet text
         scraped_hashtags = []
@@ -173,7 +224,7 @@ class StorageManager:
         
         # Save to database
         if self.use_database:
-            db_success = self.save_to_database(tweet_data, user_hashtags)
+            db_success = self.save_to_database(tweet_data, user_hashtags, user_context)
             if db_success:
                 saved_paths.append("PostgreSQL Database")
         

@@ -27,6 +27,7 @@ CREATE TABLE tweets (
     
     -- User context
     scraped_by_user VARCHAR(255), -- Telegram username who scraped it
+    scraped_by_user_id BIGINT, -- Telegram user ID who scraped it
     user_notes TEXT, -- Any additional notes from user
     
     -- Full JSON data for flexibility
@@ -44,6 +45,7 @@ CREATE TABLE user_hashtags (
     tweet_id BIGINT REFERENCES tweets(id) ON DELETE CASCADE,
     hashtag VARCHAR(255) NOT NULL,
     added_by VARCHAR(255), -- Telegram username who added it
+    added_by_user_id BIGINT, -- Telegram user ID who added it
     added_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -82,6 +84,7 @@ CREATE INDEX idx_tweets_created_at ON tweets(created_at DESC);
 CREATE INDEX idx_tweets_like_count ON tweets(like_count DESC);
 CREATE INDEX idx_tweets_retweet_count ON tweets(retweet_count DESC);
 CREATE INDEX idx_tweets_scraped_by_user ON tweets(scraped_by_user);
+CREATE INDEX idx_tweets_scraped_by_user_id ON tweets(scraped_by_user_id);
 
 -- Index for hashtags
 CREATE INDEX idx_user_hashtags_tweet_id ON user_hashtags(tweet_id);

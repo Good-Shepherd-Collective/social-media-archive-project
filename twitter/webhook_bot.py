@@ -150,18 +150,28 @@ Just send me a tweet URL to get started!
         tweet_url, hashtags = self.extract_url_and_hashtags(message_text)
         username = update.effective_user.username or f"user_{update.effective_user.id}"
         
-        # Process the tweet URL with optional hashtags
-        await self.process_tweet_url(update, tweet_url, hashtags, username)
+        # Create user context for attribution
+        user_context = {
+            'user_id': update.effective_user.id,
+            'username': username,
+            'first_name': update.effective_user.first_name,
+            'last_name': update.effective_user.last_name,
+            'notes': None  # Could be used for additional user notes in the future
+        }
+        
+        # Process the tweet URL with optional hashtags and user context
+        await self.process_tweet_url(update, tweet_url, hashtags, user_context)
     
-    async def process_tweet_url(self, update: Update, url: str, hashtags: list = None, username: str = "unknown"):
+    async def process_tweet_url(self, update: Update, url: str, hashtags: list = None, user_context: dict = None):
         """Process a tweet URL and scrape it"""
         user_id = update.effective_user.id
         
         # Detailed logging start
         logger.info(f"🔄 TWEET PROCESSING STARTED")
-        logger.info(f"   User: @{username} (ID: {user_id})")
+        logger.info(f"   User: @{user_context.get('username') if user_context else 'unknown'} (ID: {user_context.get('user_id') if user_context else 'unknown'})")
         logger.info(f"   URL: {url}")
         logger.info(f"   Hashtags: {hashtags if hashtags else 'None'}")
+        logger.info(f"   User Context: {user_context}")
         logger.info(f"   Timestamp: {datetime.now()}")
         logger.info(f"   Environment: {self.environment}")
         
@@ -174,7 +184,7 @@ Just send me a tweet URL to get started!
             
             # Scrape the tweet (this should be a FRESH scrape)
             logger.info(f"   Starting FRESH tweet scraping...")
-            tweet_data = await scrape_tweet_by_url(url, hashtags)
+            tweet_data = await scrape_tweet_by_url(url, hashtags, user_context)
             
             if tweet_data:
                 logger.info(f"   ✅ Fresh scrape successful!")
