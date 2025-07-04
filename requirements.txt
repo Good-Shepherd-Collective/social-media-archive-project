@@ -4,3 +4,9 @@ pandas>=2.0.0aiohttp>=3.8.0
 aiofiles>=23.0.0
 psycopg2-binary>=2.9.0
 pyTelegramBotAPI>=4.0.0
+
+# Instagram scraping dependencies
+beautifulsoup4>=4.13.3
+cloudscraper>=1.2.71
+pytz>=2025.1
+seleniumbase>=4.38.0
