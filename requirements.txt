@@ -1,3 +1,6 @@
 twscrape>=0.12.0
 python-dotenv>=1.0.0
-pandas>=2.0.0
+pandas>=2.0.0aiohttp>=3.8.0
+aiofiles>=23.0.0
+psycopg2-binary>=2.9.0
+pyTelegramBotAPI>=4.0.0

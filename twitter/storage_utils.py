@@ -1,17 +1,23 @@
 """
 Storage utilities for Twitter scraper
-Handles saving data to different locations based on environment
-Enhanced with PostgreSQL database support
+Enhanced with media downloading capabilities
 """
 
 import os
+import sys
 import json
 import logging
+import asyncio
 from pathlib import Path
 from typing import Dict, Any, List
 from datetime import datetime
 import psycopg2
 from psycopg2.extras import Json
+
+# Add parent directory to path for core imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from core.media_downloader import media_downloader
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +29,7 @@ class StorageManager:
         
         # Database configuration
         self.use_database = os.getenv('USE_DATABASE', 'true').lower() == 'true'
+        self.download_media = os.getenv('DOWNLOAD_MEDIA', 'true').lower() == 'true'
         self.db_config = {
             'host': os.getenv('DB_HOST', 'localhost'),
             'database': os.getenv('DB_NAME', 'social_media_archive'),
@@ -46,7 +53,7 @@ class StorageManager:
         return paths
     
     def save_to_database(self, tweet_data: Dict[Any, Any], user_hashtags: List[str] = None, user_context: dict = None) -> bool:
-        """Save tweet data to PostgreSQL database"""
+        """Save tweet data to PostgreSQL database with media download support"""
         if not self.use_database:
             return False
             
@@ -150,24 +157,11 @@ class StorageManager:
                     """
                     cursor.execute(hashtag_query, (tweet_id, hashtag))
             
-            # Insert media files
+            # Handle media files with download support
             if tweet_data.get('media'):
-                for media in tweet_data.get('media', []):
-                    media_query = """
-                        INSERT INTO media_files (tweet_id, media_type, original_url, width, height)
-                        VALUES (%s, %s, %s, %s, %s)
-                        ON CONFLICT DO NOTHING;
-                    """
-                    cursor.execute(media_query, (
-                        tweet_id,
-                        media.get('type'),
-                        media.get('url'),
-                        media.get('width'),
-                        media.get('height')
-                    ))
+                self._save_media_files(cursor, tweet_data, tweet_id)
             
             conn.commit()
-            
             cursor.close()
             conn.close()
             
@@ -178,8 +172,111 @@ class StorageManager:
             logger.error(f"Failed to save tweet {tweet_data.get('id')} to database: {e}")
             return False
     
-    def save_tweet_data(self, tweet_data: Dict[Any, Any], tweet_id: str, user_hashtags: List[str] = None, user_context: dict = None) -> List[str]:
-        """Save tweet data to appropriate location(s) based on environment"""
+    def _save_media_files(self, cursor, tweet_data: Dict[Any, Any], tweet_id: str):
+        """Save media files with download metadata to database"""
+        for media in tweet_data.get('media', []):
+            # Extract download metadata if available
+            local_path = media.get('local_path')
+            hosted_url = media.get('hosted_url')
+            file_size = media.get('file_size')
+            download_status = 'success' if local_path else 'pending'
+            
+            media_query = """
+                INSERT INTO media_files (
+                    tweet_id, post_id, platform, media_type, original_url,
+                    local_path, hosted_url, width, height, duration,
+                    file_size, mime_type, download_status, downloaded_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (tweet_id, original_url) DO UPDATE SET
+                    local_path = EXCLUDED.local_path,
+                    hosted_url = EXCLUDED.hosted_url,
+                    file_size = EXCLUDED.file_size,
+                    mime_type = EXCLUDED.mime_type,
+                    download_status = EXCLUDED.download_status,
+                    downloaded_at = EXCLUDED.downloaded_at;
+            """
+            
+            cursor.execute(media_query, (
+                tweet_id,  # tweet_id for backward compatibility
+                tweet_id,  # post_id for new schema
+                'twitter',
+                media.get('type'),
+                media.get('url'),
+                local_path,
+                hosted_url,
+                media.get('width'),
+                media.get('height'),
+                media.get('duration'),
+                file_size,
+                media.get('mime_type'),
+                download_status,
+                datetime.now() if local_path else None
+            ))
+    
+    async def download_media_for_tweet(self, tweet_data: Dict[Any, Any]) -> Dict[Any, Any]:
+        """Download media files for a tweet and update the data"""
+        if not self.download_media or not tweet_data.get('media'):
+            return tweet_data
+        
+        try:
+            tweet_id = str(tweet_data.get('id'))
+            media_items = []
+            
+            # Convert tweet media to MediaItem objects
+            from core.data_models import MediaItem, MediaType
+            
+            for media in tweet_data.get('media', []):
+                media_type = MediaType.PHOTO
+                if media.get('type') == 'video':
+                    media_type = MediaType.VIDEO
+                elif media.get('type') == 'animated_gif':
+                    media_type = MediaType.ANIMATED_GIF
+                
+                media_item = MediaItem(
+                    url=media.get('url'),
+                    media_type=media_type,
+                    width=media.get('width'),
+                    height=media.get('height'),
+                    duration=media.get('duration'),
+                    mime_type=media.get('mime_type')
+                )
+                media_items.append(media_item)
+            
+            # Download media files
+            media_metadata = await media_downloader.download_post_media(
+                media_items, tweet_id, 'twitter'
+            )
+            
+            # Update tweet_data with download information
+            updated_media = []
+            for i, original_media in enumerate(tweet_data.get('media', [])):
+                updated_media_item = original_media.copy()
+                
+                if i < len(media_metadata):
+                    metadata = media_metadata[i]
+                    if metadata.get('status') == 'success':
+                        updated_media_item['local_path'] = metadata.get('local_path')
+                        updated_media_item['hosted_url'] = metadata.get('hosted_url')
+                        updated_media_item['file_size'] = metadata.get('file_size')
+                        if metadata.get('mime_type'):
+                            updated_media_item['mime_type'] = metadata.get('mime_type')
+                
+                updated_media.append(updated_media_item)
+            
+            tweet_data['media'] = updated_media
+            logger.info(f"Updated tweet {tweet_id} with media download info")
+            
+        except Exception as e:
+            logger.error(f"Failed to download media for tweet {tweet_data.get('id')}: {e}")
+        
+        return tweet_data
+    
+    async def save_tweet_data(self, tweet_data: Dict[Any, Any], tweet_id: str, user_hashtags: List[str] = None, user_context: dict = None) -> List[str]:
+        """Save tweet data with media downloading support"""
+        # Download media files first
+        if self.download_media:
+            tweet_data = await self.download_media_for_tweet(tweet_data)
+        
         filename = f"tweet_{tweet_id}.json"
         paths = self.get_storage_paths(filename)
         saved_paths = []
@@ -224,11 +321,12 @@ class StorageManager:
         
         # Save to database
         if self.use_database:
-            db_success = self.save_to_database(tweet_data, user_hashtags, user_context)
+            db_success = self.save_to_database(enhanced_tweet_data, user_hashtags, user_context)
             if db_success:
                 saved_paths.append("PostgreSQL Database")
         
         return saved_paths
+    
     def get_storage_info(self) -> str:
         """Get human-readable storage info"""
         info_parts = []
@@ -242,6 +340,9 @@ class StorageManager:
         
         if self.use_database:
             info_parts.append("PostgreSQL Database")
+        
+        if self.download_media:
+            info_parts.append("Media Download Enabled")
         
         return " + ".join(info_parts)
 
