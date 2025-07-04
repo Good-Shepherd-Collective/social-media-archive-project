@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 """
-Webhook-enabled Telegram Bot for Twitter Scraping
-Production version that uses webhooks instead of polling
+Multi-Platform Social Media Archive Bot
+Enhanced to support Twitter, Instagram, Facebook, TikTok, and future platforms
 """
 
 import asyncio
@@ -14,442 +13,479 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
 from twscrape import API
-from storage_utils import storage_manager
+import sys
+from pathlib import Path
+
+# Add parent directory to path for platform manager
+sys.path.append('..')
+
+from bot.platform_manager import PlatformManager
+from bot.url_detector import URLDetector
+from core.data_models import UserContext
 
 # Load environment variables
-env_file = os.getenv("ENV_FILE", ".env")
-load_dotenv(env_file)
-print(f"Loading environment from: {env_file}")
+load_dotenv()
 
-# Configure logging
+# Set up logging
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-class WebhookTwitterBot:
+class MultiPlatformBot:
     def __init__(self):
-        self.api = API()
-        self.bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
-        self.authorized_users = os.getenv('TELEGRAM_AUTHORIZED_USERS', '').split(',')
-        self.webhook_url = os.getenv('WEBHOOK_URL', '')
-        self.webhook_port = int(os.getenv('WEBHOOK_PORT', '8443'))
-        self.webhook_path = os.getenv('WEBHOOK_PATH', '/webhook')
-        self.environment = os.getenv('BOT_ENVIRONMENT', 'development')
-        self.server_name = os.getenv("SERVER_NAME", "Unknown")
-        
-        if not self.bot_token:
+        # Initialize Telegram bot
+        bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+        if not bot_token:
             raise ValueError("TELEGRAM_BOT_TOKEN not found in environment variables")
         
-        # Initialize application
-        self.application = Application.builder().token(self.bot_token).build()
-        self.setup_handlers()
-    
-    def setup_handlers(self):
-        """Setup command and message handlers"""
+        self.application = Application.builder().token(bot_token).build()
+        
+        # Initialize platform manager and URL detector
+        self.platform_manager = PlatformManager()
+        self.url_detector = URLDetector()
+        
+        # Initialize Twitter API for traditional tweets
+        self.twscrape_api = API()
+        
+        # Setup handlers
+        self._setup_handlers()
+        
+        # Webhook configuration
+        self.webhook_url = os.getenv('WEBHOOK_URL', 'https://ov-ab103a.infomaniak.ch/webhook')
+        self.webhook_port = int(os.getenv('WEBHOOK_PORT', 8443))
+        
+        logger.info("Multi-platform bot initialized")
+
+    def _setup_handlers(self):
+        """Set up Telegram command and message handlers"""
+        # Command handlers
         self.application.add_handler(CommandHandler("start", self.start_command))
         self.application.add_handler(CommandHandler("help", self.help_command))
-        self.application.add_handler(CommandHandler("status", self.status_command))
+        self.application.add_handler(CommandHandler("platforms", self.platforms_command))
+        
+        # Message handlers
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
-    
+
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command"""
-        user_id = str(update.effective_user.id)
-        
-        if user_id not in self.authorized_users:
-            await update.message.reply_text("❌ You are not authorized to use this bot.")
-            return
-        
-        mode = "🌐 WEBHOOK" if self.environment == 'production' else "🔍 POLLING"
-        welcome_message = f"""
-🤖 **Twitter Scraper Bot** ({mode})
+        welcome_message = """
+🤖 **Multi-Platform Social Media Archive Bot**
 
-Welcome! Send me Twitter/X URLs and I'll scrape them for you.
+Welcome! I can archive content from multiple social media platforms.
+
+**Supported Platforms:**
+🐦 Twitter/X
+📸 Instagram
+📘 Facebook (coming soon)
+🎵 TikTok (coming soon)
+
+**How to use:**
+Just send me a social media URL and I'll archive it for you!
 
 **Commands:**
-/start - Show this message
-/help - Show help information
-/status - Check bot status
+/help - Show detailed help
+/platforms - List supported platforms
 
-**Environment:** {self.environment}
-**Server:** {os.getenv('SERVER_NAME', 'Unknown')}
-
-Just send me a tweet URL to get started!
-        """
-        
+Ready to archive! 📚
+"""
         await update.message.reply_text(welcome_message, parse_mode='Markdown')
-    
+
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help command"""
-        help_text = """
-🔗 **How to use:**
+        help_message = """
+📚 **Multi-Platform Archive Bot Help**
 
-1. Find a tweet on Twitter/X
-2. Copy the URL (e.g., https://twitter.com/user/status/123456)
-3. Send it to me
-4. I'll scrape the content and save it
+**Supported URL formats:**
 
-**Supported formats:**
-- twitter.com/user/status/id
-- x.com/user/status/id
-- Mobile links (m.twitter.com)
-- Shortened URLs (t.co)
+🐦 **Twitter/X:**
+• https://twitter.com/user/status/123...
+• https://x.com/user/status/123...
 
-**What I save:**
-- Tweet text and metadata
-- Images and videos
-- Thread conversations
-- User information
-        """
+📸 **Instagram:**
+• https://instagram.com/p/ABC123/
+• https://instagram.com/reel/ABC123/
+
+**Features:**
+✅ Full content archival
+✅ Media download
+✅ Metadata extraction
+✅ User attribution
+✅ Hashtag extraction
+
+**Usage:**
+1. Send me a supported URL
+2. Add hashtags if desired (e.g., #important #research)
+3. I'll archive the content and provide download links
+
+**Storage:**
+• JSON data: Structured metadata
+• Media files: Original quality when possible
+• Web access: View archived content online
+
+Need more help? Contact the administrator.
+"""
+        await update.message.reply_text(help_message, parse_mode='Markdown')
+
+    async def platforms_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /platforms command"""
+        platforms = self.platform_manager.get_supported_platforms()
+        platform_list = "\n".join([f"• {platform.value.title()}" for platform in platforms])
         
-        await update.message.reply_text(help_text, parse_mode='Markdown')
-    
-    async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /status command"""
-        user_id = str(update.effective_user.id)
-        
-        if user_id not in self.authorized_users:
-            await update.message.reply_text("❌ You are not authorized to use this bot.")
-            return
-        
-        status_text = f"""
-📊 **Bot Status**
+        message = f"""
+🌐 **Supported Platforms**
 
-**Environment:** {self.environment}
-**Mode:** {'Webhook' if self.environment == 'production' else 'Polling'}
-**Server:** {os.getenv('SERVER_NAME', 'Unknown')}
-**Storage:** {storage_manager.get_storage_info()}
+{platform_list}
 
-**Twitter API:** {'✅ Connected' if self.api else '❌ Not connected'}
-**Authorized Users:** {len(self.authorized_users)}
-        """
-        
-        await update.message.reply_text(status_text, parse_mode='Markdown')
-    
+**Status:** All platforms active and ready for archival!
+
+Send me a URL from any supported platform to get started.
+"""
+        await update.message.reply_text(message, parse_mode='Markdown')
+
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle incoming messages"""
-        user_id = str(update.effective_user.id)
-        
-        if user_id not in self.authorized_users:
-            await update.message.reply_text("❌ You are not authorized to use this bot.")
-            return
-        
-        message_text = update.message.text
-        
-        # Check if message contains a Twitter URL
-        if not any(domain in message_text.lower() for domain in ['twitter.com', 'x.com', 't.co']):
-            await update.message.reply_text(
-                "🔗 Please send me a Twitter/X URL to scrape.\n\n"
-                "Examples:\n""  https://twitter.com/user/status/123456\n""  https://twitter.com/user/status/123456 #breaking #news\n\n""💡 Add hashtags for context (optional)!"
-            )
-            return
-        
-        # Process the tweet URL
-        # Extract URL and optional hashtags
-        tweet_url, hashtags = self.extract_url_and_hashtags(message_text)
-        username = update.effective_user.username or f"user_{update.effective_user.id}"
-        
-        # Create user context for attribution
-        user_context = {
-            'user_id': update.effective_user.id,
-            'username': username,
-            'first_name': update.effective_user.first_name,
-            'last_name': update.effective_user.last_name,
-            'notes': None  # Could be used for additional user notes in the future
-        }
-        
-        # Process the tweet URL with optional hashtags and user context
-        await self.process_tweet_url(update, tweet_url, hashtags, user_context)
-    
-    async def process_tweet_url(self, update: Update, url: str, hashtags: list = None, user_context: dict = None):
-        """Process a tweet URL and scrape it"""
-        user_id = update.effective_user.id
-        
-        # Detailed logging start
-        logger.info(f"🔄 TWEET PROCESSING STARTED")
-        logger.info(f"   User: @{user_context.get('username') if user_context else 'unknown'} (ID: {user_context.get('user_id') if user_context else 'unknown'})")
-        logger.info(f"   URL: {url}")
-        logger.info(f"   Hashtags: {hashtags if hashtags else 'None'}")
-        logger.info(f"   User Context: {user_context}")
-        logger.info(f"   Timestamp: {datetime.now()}")
-        logger.info(f"   Environment: {self.environment}")
-        
+        """Handle incoming messages with URLs"""
         try:
-            # Send processing message
-            processing_msg = await update.message.reply_text("🔄 Processing tweet...")
+            message_text = update.message.text
+            chat_id = update.message.chat_id
+            user_id = update.message.from_user.id
+            username = update.message.from_user.username or f"user_{user_id}"
             
-            # Import and use the scraping logic
-            from scrape_tweet import scrape_tweet_by_url
+            logger.info(f"Processing message from {username} (ID: {user_id})")
+            logger.info(f"Message: {message_text}")
             
-            # Scrape the tweet (this should be a FRESH scrape)
-            logger.info(f"   Starting FRESH tweet scraping...")
-            tweet_data = await scrape_tweet_by_url(url, hashtags, user_context)
+            # Detect URLs and extract hashtags
+            urls = self.url_detector.extract_urls(message_text)
+            hashtags = self.url_detector.extract_hashtags(message_text)
             
-            if tweet_data:
-                logger.info(f"   ✅ Fresh scrape successful!")
-                logger.info(f"   Media count: {len(tweet_data.get('media', []))}")
-                if tweet_data.get('media'):
-                    for i, media in enumerate(tweet_data.get('media', [])):
-                        logger.info(f"   Media {i+1}: {media.get('type')} - {media.get('url')}")
-                else:
-                    logger.info(f"   No media found in tweet_data")
-            else:
-                logger.info(f"   ❌ Fresh scrape failed")
-            
-            if tweet_data:
-                # Check file locations and create response
-                file_locations = []
-                expected_filename = f"tweet_{tweet_data.get('id')}.json"
-                
-                # Check multiple possible locations
-                possible_paths = [
-                    f"./{expected_filename}",
-                    f"./scraped_data/{expected_filename}",
-                    f"/home/ubuntu/social-media-archive-project/{expected_filename}",
-                    f"/home/ubuntu/social-media-archive-project/scraped_data/{expected_filename}"
-                ]
-                
-                for path in possible_paths:
-                    if os.path.exists(path):
-                        file_locations.append(path)
-                
-                # Create file URLs (remove duplicates)
-                file_urls = []
-                seen_filenames = set()
-                for location in file_locations:
-                    # Convert local path to web URL
-                    filename = os.path.basename(location)
-                    if filename not in seen_filenames:
-                        file_url = f"https://ov-ab103a.infomaniak.ch/data/{filename}"
-                        file_urls.append(file_url)
-                        seen_filenames.add(filename)
-                        logger.info(f"   Generated URL: {file_url}")
-                
-                # Prepare response in the requested format
-                tweet_text = tweet_data.get('text', 'No text')
-                if len(tweet_text) > 100:
-                    display_text = tweet_text[:100] + "..."
-                else:
-                    display_text = tweet_text
-                
-                response_parts = [
-                    "✅ Tweet scraped successfully!",
-                    "",
-                    f"👤 Author: @{tweet_data.get('author', 'Unknown')} ({tweet_data.get('author_name', 'Unknown')})",
-                    f"📅 Date: {tweet_data.get('created_at', 'Unknown')}",
-                    f"👍 Likes: {tweet_data.get('like_count', 0)} | 🔄 Retweets: {tweet_data.get('retweet_count', 0)} | 💬 Replies: {tweet_data.get('reply_count', 0)}",
-                    "",
-                    f"Text: {display_text}",
-                    "",
-                ]
-                
-                # Add media download links if available
-                if tweet_data.get('media'):
-                    media_links = []
-                    for i, media in enumerate(tweet_data.get('media', [])):
-                        if media.get('url'):
-                            media_type = media.get('type', 'media').lower()
-                            if media_type in ['photo', 'image']:
-                                icon = "🖼️"
-                            elif media_type in ['video', 'animated_gif']:
-                                icon = "🎥"
-                            else:
-                                icon = "📎"
-                            media_links.append(f"{icon} [Download {media_type.title()} {i+1}]({media['url']})")
-                    
-                    if media_links:
-                        response_parts.extend([
-                            "",
-                            "📥 Media Downloads:"
-                        ])
-                        response_parts.extend([f"  {link}" for link in media_links])
+            if not urls:
+                await update.message.reply_text(
+                    "🔗 Please send me a social media URL to archive!\n\n"
+                    "Supported platforms: Twitter, Instagram\n"
+                    "Use /help for more information."
+                )
+                return
 
-                # Add file information
-                if file_urls:
-                    if len(file_urls) == 1:
-                        response_parts.append(f"💾 Saved to: {file_urls[0]}")
-                    else:
-                        response_parts.append(f"💾 Saved to {len(file_urls)} location(s):")
-                        for url in file_urls:
-                            response_parts.append(f"  • {url}")
-                else:
-                    response_parts.append(f"💾 Saved locally (check server for file)")
-                
-                response_text = "\n".join(response_parts)
-                
-                # Edit the processing message
-                await processing_msg.edit_text(response_text, )
-                
-                # Log the activity
-                logger.info(f"Tweet scraped successfully by user {update.effective_user.id}: {tweet_data.get('id')}")
-                
-            else:
-                await processing_msg.edit_text("❌ Failed to scrape tweet. The tweet may be private, deleted, or the URL is invalid.")
-                logger.error(f"Tweet scraping failed for URL: {url}")
-                
+            # Process each URL
+            for url in urls:
+                await self._process_url(update, url, hashtags, user_id, username)
+
         except Exception as e:
-            logger.error(f"Error processing tweet: {e}")
-            await processing_msg.edit_text(f"❌ Error processing tweet: {str(e)}")
-    
-    async def webhook_handler(self, request):
-        """Handle incoming webhook requests"""
-        try:
-            # Get the JSON data from the request
-            data = await request.json()
-            
-            # Create Update object
-            update = Update.de_json(data, self.application.bot)
-            
-            # Process the update
-            await self.application.process_update(update)
-            
-            return web.Response(text="OK")
-            
-        except Exception as e:
-            logger.error(f"Webhook error: {e}")
-            return web.Response(text="Error", status=500)
-    
-    async def setup_webhook(self):
-        """Setup webhook with Telegram"""
-        try:
-            webhook_url = f"{self.webhook_url}{self.webhook_path}"
-            
-            # Set webhook
-            await self.application.bot.set_webhook(
-                url=webhook_url,
-                allowed_updates=["message", "callback_query"]
+            logger.error(f"Error handling message: {e}")
+            await update.message.reply_text(
+                "❌ Sorry, an error occurred while processing your message. Please try again."
             )
+
+    async def _process_url(self, update: Update, url: str, user_hashtags: list, user_id: int, username: str):
+        """Process a single URL"""
+        try:
+            # Detect platform
+            platform = self.url_detector.detect_platform(url)
             
-            logger.info(f"Webhook set to: {webhook_url}")
+            if not platform:
+                await update.message.reply_text(f"❌ Unsupported URL: {url}")
+                return
+
+            # Create user context
+            user_context = UserContext(
+                telegram_user_id=user_id,
+                telegram_username=username
+            )
+
+            # Send processing message
+            processing_msg = await update.message.reply_text(
+                f"⏳ Processing {platform.value.title()} content...\n\n"
+                f"🔗 URL: {url}\n"
+                f"📊 Platform: {platform.value.title()}\n"
+                f"👤 User: @{username}"
+            )
+
+            logger.info(f"   🎯 Platform detected: {platform}")
+            logger.info(f"   🔗 URL: {url}")
+            logger.info(f"   #️⃣ Hashtags: {user_hashtags}")
+            logger.info(f"   🚀 Starting {platform} scraping...")
+
+            # Scrape content using platform manager
+            try:
+                post_data = await self.platform_manager.scrape_url(url, user_context)
+                
+                if not post_data:
+                    await self._send_error_response(update, platform, "No data retrieved", processing_msg)
+                    return
+
+                
+                # Save post data to JSON file
+                self.save_post_to_json(post_data, platform, user_context, user_hashtags)
+
+                # Send success response with detailed format
+                await self._send_success_response(update, platform, post_data, user_hashtags, processing_msg)
+
+            except Exception as scraping_error:
+                logger.error(f"Scraping error: {scraping_error}")
+                await self._send_error_response(update, platform, str(scraping_error), processing_msg)
+
+        except Exception as e:
+            logger.error(f"Error processing URL {url}: {e}")
+            await update.message.reply_text(f"❌ Error processing {url}: {str(e)}")
+
+    
+    def save_post_to_json(self, post_data, platform, user_context=None, user_hashtags=None):
+        """Save SocialMediaPost to JSON file with user attribution and media downloads"""
+        try:
+            # Create data directory if it doesn't exist
+            data_dir = Path("/home/ubuntu/social-media-archive-project/media_storage/data")
+            data_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create media directory for downloads
+            media_dir = Path("/home/ubuntu/social-media-archive-project/media_storage/data/media")
+            media_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Download media files and update media objects
+            downloaded_media = []
+            if post_data.media:
+                import httpx
+                for i, media in enumerate(post_data.media):
+                    try:
+                        # Create filename for local storage
+                        file_extension = media.url.split('.')[-1].split('?')[0] if '.' in media.url else 'mp4'
+                        local_filename = f"{post_data.id}_media_{i}.{file_extension}"
+                        local_path = media_dir / local_filename
+                        
+                        # Download the media file
+                        with httpx.Client() as client:
+                            response = client.get(media.url, timeout=30)
+                            if response.status_code == 200:
+                                with open(local_path, 'wb') as f:
+                                    f.write(response.content)
+                                
+                                downloaded_media.append({
+                                    'url': media.url,
+                                    'type': media.media_type.value if hasattr(media.media_type, 'value') else str(media.media_type),
+                                    'width': media.width,
+                                    'height': media.height,
+                                    'mime_type': media.mime_type,
+                                    'local_path': str(local_path),
+                                    'hosted_url': f"https://ov-ab103a.infomaniak.ch/data/media/{local_filename}",
+                                    'file_size': local_path.stat().st_size if local_path.exists() else None
+                                })
+                                logger.info(f"Downloaded media file: {local_filename}")
+                            else:
+                                # Keep original if download fails
+                                downloaded_media.append({
+                                    'url': media.url,
+                                    'type': media.media_type.value if hasattr(media.media_type, 'value') else str(media.media_type),
+                                    'width': media.width,
+                                    'height': media.height,
+                                    'mime_type': media.mime_type,
+                                    'local_path': None,
+                                    'hosted_url': None,
+                                    'download_error': f"HTTP {response.status_code}"
+                                })
+                    except Exception as media_error:
+                        logger.error(f"Failed to download media {i}: {media_error}")
+                        downloaded_media.append({
+                            'url': media.url,
+                            'type': media.media_type.value if hasattr(media.media_type, 'value') else str(media.media_type),
+                            'width': media.width,
+                            'height': media.height,
+                            'mime_type': media.mime_type,
+                            'local_path': None,
+                            'hosted_url': None,
+                            'download_error': str(media_error)
+                        })
+            
+            # Convert SocialMediaPost to dictionary with enhanced data
+            post_dict = {
+                'id': post_data.id,
+                'platform': post_data.platform.value if hasattr(post_data.platform, 'value') else str(post_data.platform),
+                'url': post_data.url,
+                'text': post_data.text,
+                'author': {
+                    'username': post_data.author.username if post_data.author else None,
+                    'display_name': post_data.author.display_name if post_data.author else None,
+                    'followers_count': post_data.author.followers_count if post_data.author else 0,
+                    'verified': post_data.author.verified if post_data.author else False,
+                    'profile_url': post_data.author.profile_url if post_data.author else None,
+                    'avatar_url': post_data.author.avatar_url if post_data.author else None
+                },
+                'created_at': post_data.created_at.isoformat() if post_data.created_at else None,
+                'scraped_at': post_data.scraped_at.isoformat() if hasattr(post_data, 'scraped_at') and post_data.scraped_at else datetime.now().isoformat(),
+                'metrics': {
+                    'likes': post_data.metrics.likes if post_data.metrics else 0,
+                    'shares': post_data.metrics.shares if post_data.metrics else 0,
+                    'comments': post_data.metrics.comments if post_data.metrics else 0,
+                    'views': post_data.metrics.views if post_data.metrics else None
+                },
+                'media': downloaded_media,
+                'scraped_hashtags': post_data.scraped_hashtags if hasattr(post_data, 'scraped_hashtags') else [],
+                # NEW: User attribution and hashtags
+                'telegram_user': {
+                    'user_id': user_context.telegram_user_id if user_context else None,
+                    'username': user_context.telegram_username if user_context else None,
+                    'first_name': user_context.first_name if user_context else None,
+                    'last_name': user_context.last_name if user_context else None
+                } if user_context else None,
+                'user_hashtags': user_hashtags or [],
+                'download_stats': {
+                    'total_media': len(downloaded_media),
+                    'successful_downloads': len([m for m in downloaded_media if m.get('local_path')]),
+                    'failed_downloads': len([m for m in downloaded_media if m.get('download_error')])
+                }
+            }
+            
+            # Save to JSON file
+            filename = f"tweet_{post_data.id}.json" if platform.value == 'twitter' else f"{platform.value}_{post_data.id}.json"
+            filepath = data_dir / filename
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(post_dict, f, ensure_ascii=False, indent=2, default=str)
+            
+            logger.info(f"Saved {platform.value} post {post_data.id} to {filepath}")
             return True
             
         except Exception as e:
-            logger.error(f"Failed to set webhook: {e}")
+            logger.error(f"Failed to save post to JSON: {e}")
             return False
-    
-    async def run_webhook(self):
-        """Run bot in webhook mode"""
+    async def _send_success_response(self, update: Update, platform, post_data, user_hashtags: list, processing_msg):
+        """Send detailed success response with proper SocialMediaPost object access"""
+        try:
+            # Access SocialMediaPost object attributes directly
+            author_username = post_data.author.username if post_data.author else 'Unknown'
+            author_name = post_data.author.display_name if post_data.author else 'Unknown'
+            post_id = post_data.id
+            tweet_text = post_data.text
+            created_at = post_data.created_at
+            
+            # Get metrics from the metrics object
+            likes = post_data.metrics.likes if post_data.metrics else 0
+            retweets = post_data.metrics.shares if post_data.metrics else 0  # shares is retweets for Twitter
+            replies = post_data.metrics.comments if post_data.metrics else 0
+            
+            # Prepare text display
+            if len(tweet_text) > 100:
+                display_text = tweet_text[:100] + "..."
+            else:
+                display_text = tweet_text
+            
+            # Build response parts
+            response_parts = [
+                "✅ Tweet scraped successfully!" if platform.value == 'twitter' else f"✅ {platform.value.title()} scraped successfully!",
+                "",
+                f"👤 Author: @{author_username} ({author_name})",
+                f"📅 Date: {created_at}",
+                f"👍 Likes: {likes} | 🔄 Retweets: {retweets} | 💬 Replies: {replies}",
+                "",
+                f"Text: {display_text}",
+                "",
+            ]
+            
+            # Add media download links if available
+            if post_data.media:
+                media_links = []
+                for i, media in enumerate(post_data.media):
+                    if media.url:
+                        media_type = media.media_type.value.lower()
+                        if media_type in ['photo', 'image']:
+                            icon = "🖼️"
+                        elif media_type in ['video', 'animated_gif']:
+                            icon = "🎥"
+                        else:
+                            icon = "📎"
+                        media_links.append(f"{icon} [Download {media_type.title()} {i+1}]({media.url})")
+                
+                if media_links:
+                    response_parts.extend([
+                        "",
+                        "📥 Media Downloads:"
+                    ])
+                    response_parts.extend([f"  {link}" for link in media_links])
+            
+            # Add JSON storage link
+            response_parts.extend([
+                "",
+                f"💾 Saved to: https://ov-ab103a.infomaniak.ch/data/tweet_{post_id}.json"
+            ])
+            
+            # Join response parts
+            response_text = "\n".join(response_parts)
+            
+            # Send response
+            await processing_msg.edit_text(response_text, disable_web_page_preview=True)
+            
+        except Exception as e:
+            logger.error(f"Error sending detailed success response: {e}")
+            # Fallback to simple message
+            simple_message = f"✅ {platform.value.title()} content archived successfully!\n\nPost ID: {post_data.id}\nAuthor: {post_data.author.display_name if post_data.author else 'Unknown'}"
+            await processing_msg.edit_text(simple_message)
+
+    async def _send_error_response(self, update: Update, platform, error, processing_msg):
+        """Send error response"""
+        error_message = f"""❌ **{platform.value.title()} Archive Failed**
+
+**Error:** {error}
+
+**🔧 What you can try:**
+• Check if the URL is accessible and public
+• Try again in a few minutes (rate limiting)
+• Ensure the post still exists
+
+**💡 Need help?** Send /help for supported formats."""
+        
+        try:
+            await processing_msg.edit_text(error_message, parse_mode='Markdown')
+        except Exception:
+            # Fallback without markdown
+            simple_error = f"❌ {platform.value.title()} Archive Failed\n\nError: {error}\n\nTry again later or contact support."
+            await processing_msg.edit_text(simple_error)
+
+    async def webhook_handler(self, request):
+        """Handle incoming webhook requests"""
+        try:
+            body = await request.text()
+            update = Update.de_json(json.loads(body), self.application.bot)
+            await self.application.process_update(update)
+            return web.Response(text="OK")
+        except Exception as e:
+            logger.error(f"Webhook error: {e}")
+            return web.Response(text="Error", status=500)
+
+    async def start_bot(self):
+        """Start the bot in webhook mode"""
         logger.info("Starting bot in WEBHOOK mode")
         
-        # Initialize the application
+        # Initialize application
         await self.application.initialize()
+        await self.application.start()
         
-        # Setup webhook
-        if not await self.setup_webhook():
-            logger.error("Failed to setup webhook")
-            return
+        # Set webhook
+        await self.application.bot.set_webhook(url=self.webhook_url)
+        logger.info(f"Webhook set to: {self.webhook_url}")
         
-        # Create web application
+        # Create web app
         app = web.Application()
-        app.router.add_post(self.webhook_path, self.webhook_handler)
-        app.router.add_get("/data/{filename}", self.serve_json_file)
+        app.router.add_post('/webhook', self.webhook_handler)
         
-        # Start the web server
+        # Start web server
         runner = web.AppRunner(app)
         await runner.setup()
-        
         site = web.TCPSite(runner, '0.0.0.0', self.webhook_port)
         await site.start()
         
         logger.info(f"Webhook server started on port {self.webhook_port}")
         
+        # Get supported platforms
+        platforms = self.platform_manager.get_supported_platforms()
+        logger.info(f"Multi-platform support: {', '.join(platforms)}")
+        
         # Keep running
-        try:
-            await asyncio.Event().wait()
-        except KeyboardInterrupt:
-            logger.info("Bot stopped by user")
-        finally:
-            await self.application.stop()
-            await runner.cleanup()
-    
-    async def run_polling(self):
-        """Run bot in polling mode (development)"""
-        logger.info("Starting bot in POLLING mode (development)")
-        
-        # Remove webhook if exists
-        await self.application.bot.delete_webhook()
-        
-        # Start polling
-        await self.application.run_polling(
-            allowed_updates=["message", "callback_query"],
-            poll_interval=2.0,
-            timeout=10
-        )
-    
-    async def run(self):
-        """Run the bot based on environment"""
-        if self.environment == 'production' and self.webhook_url:
-            await self.run_webhook()
-        else:
-            await self.run_polling()
-
-    
-    def extract_url_and_hashtags(self, message_text):
-        """Extract tweet URL and hashtags from message"""
-        import re
-        
-        # Find Twitter/X URLs
-        url_pattern = r'https?://(?:www\.)?(?:twitter\.com|x\.com|t\.co)/\S+'
-        url_match = re.search(url_pattern, message_text)
-        
-        if not url_match:
-            return message_text.strip(), []
-        
-        tweet_url = url_match.group(0)
-        
-        # Extract hashtags (# followed by word characters)
-        hashtag_pattern = r'#([\w]+)'
-        hashtags = re.findall(hashtag_pattern, message_text, re.IGNORECASE)
-        
-        # Clean hashtags (remove duplicates, lowercase)
-        hashtags = list(set([tag.lower() for tag in hashtags]))
-        
-        return tweet_url, hashtags
-    
-    async def serve_json_file(self, request):
-        """Serve JSON files from the data directory"""
-        try:
-            filename = request.match_info['filename']
-            
-            # Security: only allow .json files and prevent directory traversal
-            if not filename.endswith('.json') or '..' in filename or '/' in filename:
-                return web.Response(text="Invalid filename", status=400)
-            
-            # Look for the file in multiple locations
-            possible_paths = [
-                f"./scraped_data/{filename}",
-                f"/home/ubuntu/social-media-archive-project/scraped_data/{filename}",
-                f"./{filename}",
-                f"/home/ubuntu/social-media-archive-project/{filename}"
-            ]
-            
-            for file_path in possible_paths:
-                if os.path.exists(file_path):
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        data = f.read()
-                    
-                    return web.Response(
-                        text=data,
-                        content_type='application/json',
-                        headers={'Content-Disposition': f'inline; filename="{filename}"'}
-                    )
-            
-            return web.Response(text="File not found", status=404)
-            
-        except Exception as e:
-            logger.error(f"Error serving file: {e}")
-            return web.Response(text="Internal server error", status=500)
+        while True:
+            await asyncio.sleep(1)
 
 async def main():
     """Main function"""
-    try:
-        bot = WebhookTwitterBot()
-        await bot.run()
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
-    except Exception as e:
-        logger.error(f"Bot error: {e}")
+    bot = MultiPlatformBot()
+    await bot.start_bot()
 
 if __name__ == "__main__":
     asyncio.run(main())
