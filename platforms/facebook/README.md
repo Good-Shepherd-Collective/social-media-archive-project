@@ -19,3 +19,5 @@ pip install -r requirements.txt
 ## Notes
 
 Facebook scraping tools will be implemented in future versions.
+
+[text](https://github.com/kevinzg/facebook-scraper)

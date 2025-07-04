@@ -19,3 +19,5 @@ pip install -r requirements.txt
 ## Notes
 
 Instagram scraping tools will be implemented in future versions.
+
+[Repo to utilize [text](https://github.com/FaustRen/instagram-posts-scraper)](https://github.com/postaddictme/instagram-php-scraper)
