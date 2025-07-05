@@ -113,19 +113,34 @@ class FacebookScraper(BaseScraper):
         # Check post type
         post_type = data.get('type', '')
         
-        if post_type == 'video_post' and 'video_representations' in data:
-            # Get the best quality video
-            video_reps = data['video_representations']
-            if video_reps:
-                # Sort by bandwidth to get best quality
-                best_video = max(video_reps, key=lambda x: x.get('bandwidth', 0))
-                media_items.append(MediaItem(
-                    url=best_video.get('base_url', ''),
-                    media_type=MediaType.VIDEO,
-                    width=best_video.get('width'),
-                    height=best_video.get('height'),
-                    duration=data.get('playable_duration_s')
-                ))
+        if post_type in ["video_post", "reel"]:
+            # Check for new format (representations)
+            if 'representations' in data and isinstance(data['representations'], dict):
+                reps_data = data['representations'].get('representations', [])
+                if reps_data:
+                    # Filter out audio-only and get best quality video
+                    video_reps = [r for r in reps_data if isinstance(r, dict) and r.get('height', 0) > 0]
+                    if video_reps:
+                        best_video = max(video_reps, key=lambda x: x.get('bandwidth', 0))
+                        media_items.append(MediaItem(
+                            url=best_video.get('base_url', ''),
+                            media_type=MediaType.VIDEO,
+                            width=best_video.get('width'),
+                            height=best_video.get('height'),
+                            duration=data.get('length_in_second', data.get('playable_duration_s'))
+                        ))
+            # Check for old format
+            elif 'video_representations' in data:
+                video_reps = data['video_representations']
+                if video_reps:
+                    best_video = max(video_reps, key=lambda x: x.get('bandwidth', 0))
+                    media_items.append(MediaItem(
+                        url=best_video.get('base_url', ''),
+                        media_type=MediaType.VIDEO,
+                        width=best_video.get('width'),
+                        height=best_video.get('height'),
+                        duration=data.get('playable_duration_s')
+                    ))
             
             # Add thumbnail
             if 'thumbnail_uri' in data:
@@ -144,6 +159,17 @@ class FacebookScraper(BaseScraper):
                         width=img.get('width'),
                         height=img.get('height')
                     ))
+        
+        # Handle regular posts that have an image field
+        if 'image' in data and isinstance(data['image'], dict):
+            img = data['image']
+            if img.get('uri'):
+                media_items.append(MediaItem(
+                    url=img.get('uri', ''),
+                    media_type=MediaType.PHOTO,
+                    width=img.get('width'),
+                    height=img.get('height')
+                ))
         
         return media_items
     
