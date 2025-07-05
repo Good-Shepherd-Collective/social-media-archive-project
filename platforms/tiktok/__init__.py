@@ -1,1 +1,5 @@
-# Placeholder for TikTok scraper
+"""TikTok platform scraper module"""
+
+from .scraper import TikTokScraper
+
+__all__ = ['TikTokScraper']

@@ -12,6 +12,7 @@ from platforms.twitter.scraper import TwitterScraper
 from platforms.instagram.scraper import InstagramScraper
 # from platforms.facebook.scraper import FacebookScraper
 from platforms.facebook.scraper import FacebookScraper
+from platforms.tiktok.scraper import TikTokScraper
 # from platforms.tiktok.scraper import TikTokScraper
 
 class PlatformManager:
@@ -22,7 +23,7 @@ class PlatformManager:
             'twitter': TwitterScraper(),
             'instagram': InstagramScraper(),
             'facebook': FacebookScraper(),
-            # 'tiktok': TikTokScraper(),
+            'tiktok': TikTokScraper(),
         }
         
         # URL patterns to platform mapping

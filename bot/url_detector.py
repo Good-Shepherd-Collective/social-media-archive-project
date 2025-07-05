@@ -38,7 +38,7 @@ class URLDetector:
         ],
         Platform.TIKTOK: [
             r'https?://(?:www\.)?tiktok\.com/@[\w.-]+/video/\d+',
-            r'https?://(?:vm\.)?tiktok\.com/[\w-]+',
+            r'https?://(?:v[mt]\.)?tiktok\.com/[\w-]+',
             r'https?://(?:www\.)?tiktok\.com/t/[\w-]+',
             r'https?://m\.tiktok\.com/v/\d+'
         ]
