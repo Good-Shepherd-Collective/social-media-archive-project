@@ -21,15 +21,21 @@ sys.path.append('..')
 
 from bot.platform_manager import PlatformManager
 from bot.url_detector import URLDetector
+from core.database_storage import database_storage
 from core.data_models import UserContext
 
 # Load environment variables
 load_dotenv()
 
 # Set up logging
+log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format=log_format,
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('logs/bot.log')
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -248,7 +254,18 @@ Send me a URL from any supported platform to get started.
                 for i, media in enumerate(post_data.media):
                     try:
                         # Create filename for local storage
-                        file_extension = media.url.split('.')[-1].split('?')[0] if '.' in media.url else 'mp4'
+                        # Extract file extension properly
+                        if media.media_type.value == 'video':
+                            file_extension = 'mp4'
+                        elif media.media_type.value == 'photo':
+                            file_extension = 'jpg'
+                        elif media.media_type.value == 'animated_gif':
+                            file_extension = 'gif'
+                        else:
+                            # Try to extract from URL
+                            import re
+                            ext_match = re.search(r'\.([a-zA-Z0-9]{2,4})(?:\?|$)', media.url)
+                            file_extension = ext_match.group(1) if ext_match else 'mp4'
                         local_filename = f"{post_data.id}_media_{i}.{file_extension}"
                         local_path = media_dir / local_filename
                         
@@ -342,6 +359,12 @@ Send me a URL from any supported platform to get started.
                 json.dump(post_dict, f, ensure_ascii=False, indent=2, default=str)
             
             logger.info(f"Saved {platform.value} post {post_data.id} to {filepath}")
+            
+            # Also save to database
+            if database_storage.save_post(post_data):
+                logger.info(f"Saved {platform.value} post {post_data.id} to database")
+            else:
+                logger.warning(f"Failed to save {platform.value} post {post_data.id} to database")
             return True
             
         except Exception as e:
@@ -404,7 +427,7 @@ Send me a URL from any supported platform to get started.
             # Add JSON storage link
             response_parts.extend([
                 "",
-                f"💾 Saved to: https://ov-ab103a.infomaniak.ch/data/tweet_{post_id}.json"
+                f"💾 Saved to: https://ov-ab103a.infomaniak.ch/data/{platform.value}_{post_id}.json" if platform.value != "twitter" else f"💾 Saved to: https://ov-ab103a.infomaniak.ch/data/tweet_{post_id}.json"
             ])
             
             # Join response parts

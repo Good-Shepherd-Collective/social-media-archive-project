@@ -13,4 +13,4 @@ export ENV_FILE=".env.local"
 # Run the webhook bot (it will use polling mode based on environment)
 cd "$(dirname "$0")"
 source venv/bin/activate
-python twitter/webhook_bot.py
+python main_bot.py

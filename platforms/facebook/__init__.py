@@ -1,6 +1,5 @@
-"""
-Facebook platform scraper (placeholder)
-"""
+"""Facebook platform scraper module"""
 
-# from .scraper import FacebookScraper
-# __all__ = ['FacebookScraper']
+from .scraper import FacebookScraper
+
+__all__ = ['FacebookScraper']

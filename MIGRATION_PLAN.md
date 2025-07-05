@@ -7,7 +7,7 @@
 - **Entry Point**: `start_webhook_bot.sh` -> `twitter/webhook_bot.py`
 - **Dependencies**: 
   - `twitter/storage_utils.py` (enhanced with media download)
-  - `twitter/scrape_tweet.py` (tweet processing)
+  - `platforms/twitter/legacy_scraper.py` (tweet processing)
   - `twitter/accounts.db` (active database)
 
 ### New Modular System  

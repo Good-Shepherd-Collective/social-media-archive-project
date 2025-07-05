@@ -11,4 +11,4 @@ echo "Webhook URL: https://ov-ab103a.infomaniak.ch/webhook"
 echo ""
 
 # Start the webhook bot
-python twitter/webhook_bot.py
+python main_bot.py

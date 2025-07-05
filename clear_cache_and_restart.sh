@@ -14,8 +14,8 @@ echo "📁 Project directory: $PROJECT_DIR"
 # Step 1: Stop any running bot processes
 echo ""
 echo "🛑 Stopping any running bot processes..."
-pkill -f "webhook_bot.py" 2>/dev/null || echo "   No bot processes found"
-pkill -f "python.*twitter.*webhook" 2>/dev/null || echo "   No webhook processes found"
+pkill -f "main_bot.py" 2>/dev/null || echo "   No bot processes found"
+pkill -f "python.*main_bot processes found"
 
 # Step 2: Clear Python cache
 echo ""
@@ -92,8 +92,8 @@ start_local() {
     fi
     
     # Start the bot
-    echo "   Starting webhook_bot.py in polling mode..."
-    python twitter/webhook_bot.py
+    echo "   Starting main_bot.py in polling mode..."
+    python main_bot.py
 }
 
 # Function to start webhook mode
@@ -112,8 +112,8 @@ start_webhook() {
     fi
     
     # Start the bot
-    echo "   Starting webhook_bot.py in webhook mode..."
-    python twitter/webhook_bot.py
+    echo "   Starting main_bot.py in webhook mode..."
+    python main_bot.py
 }
 
 # Interactive mode if no arguments provided

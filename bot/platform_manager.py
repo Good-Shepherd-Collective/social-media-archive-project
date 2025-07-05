@@ -1,74 +1,81 @@
 """
-Platform manager for routing URLs to appropriate scrapers
-Enhanced with Instagram support
+Platform manager to handle different social media scrapers
 """
 
-import re
-from typing import Optional, Dict, Type
-from core.base_scraper import BaseScraper
+import asyncio
+import inspect
+from typing import Optional, Dict
+from urllib.parse import urlparse
+
+from core.data_models import Platform, SocialMediaPost, UserContext
 from platforms.twitter.scraper import TwitterScraper
 from platforms.instagram.scraper import InstagramScraper
+# from platforms.facebook.scraper import FacebookScraper
+from platforms.facebook.scraper import FacebookScraper
+# from platforms.tiktok.scraper import TikTokScraper
 
 class PlatformManager:
-    """Manages different social media platform scrapers"""
+    """Manages different platform scrapers"""
     
     def __init__(self):
-        self.scrapers: Dict[str, BaseScraper] = {
+        self.scrapers = {
             'twitter': TwitterScraper(),
             'instagram': InstagramScraper(),
+            'facebook': FacebookScraper(),
+            # 'tiktok': TikTokScraper(),
         }
         
-        # URL patterns for platform detection
-        self.platform_patterns = {
-            'twitter': [
-                r'https?://(?:www\.)?(?:twitter\.com|x\.com)/',
-                r'https?://t\.co/'
-            ],
-            'instagram': [
-                r'https?://(?:www\.)?instagram\.com/'
-            ],
-            'facebook': [
-                r'https?://(?:www\.)?facebook\.com/',
-                r'https?://(?:www\.)?fb\.com/'
-            ],
-            'tiktok': [
-                r'https?://(?:www\.)?tiktok\.com/',
-                r'https?://vm\.tiktok\.com/'
-            ]
+        # URL patterns to platform mapping
+        self.url_patterns = {
+            'twitter.com': 'twitter',
+            'x.com': 'twitter',
+            'instagram.com': 'instagram',
+            'facebook.com': 'facebook',
+            'fb.com': 'facebook',
+            'tiktok.com': 'tiktok',
         }
     
-    def detect_platform(self, url: str) -> Optional[str]:
-        """Detect which platform a URL belongs to"""
-        for platform, patterns in self.platform_patterns.items():
-            for pattern in patterns:
-                if re.match(pattern, url, re.IGNORECASE):
-                    return platform
+    def detect_platform(self, url: str) -> Optional[Platform]:
+        """Detect platform from URL"""
+        parsed = urlparse(url.lower())
+        domain = parsed.netloc.replace('www.', '')
+        
+        for pattern, platform_name in self.url_patterns.items():
+            if pattern in domain:
+                return Platform(platform_name)
+        
         return None
     
-    def get_scraper(self, platform: str) -> Optional[BaseScraper]:
-        """Get scraper for specified platform"""
-        return self.scrapers.get(platform.lower())
-    
-    def get_scraper_for_url(self, url: str) -> Optional[BaseScraper]:
-        """Get appropriate scraper for a given URL"""
+    def get_scraper_for_url(self, url: str):
+        """Get appropriate scraper for URL"""
         platform = self.detect_platform(url)
         if platform:
-            return self.get_scraper(platform)
+            return self.scrapers.get(platform.value)
         return None
     
-    def get_supported_platforms(self) -> list:
-        """Get list of platforms with active scrapers"""
+    def get_scraper(self, platform: Platform):
+        """Get scraper for specific platform"""
+        return self.scrapers.get(platform.value)
+    
+    def get_supported_platforms(self):
+        """Get list of supported platforms"""
         return list(self.scrapers.keys())
     
-    def is_url_supported(self, url: str) -> bool:
-        """Check if URL is supported by any scraper"""
+    def is_supported_url(self, url: str) -> bool:
+        """Check if URL is from a supported platform"""
         return self.detect_platform(url) is not None
     
     async def scrape_url(self, url: str, user_context=None):
         """Scrape URL using appropriate platform scraper"""
         scraper = self.get_scraper_for_url(url)
         if scraper:
-            return await scraper.scrape_post(url, user_context)
+            # Check if the scraper method is async
+            if inspect.iscoroutinefunction(scraper.scrape_post):
+                return await scraper.scrape_post(url, user_context)
+            else:
+                # Run sync method in executor to avoid blocking
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(None, scraper.scrape_post, url, user_context)
         raise ValueError(f"No scraper available for URL: {url}")
 
 # Global instance

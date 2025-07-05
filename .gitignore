@@ -86,3 +86,17 @@ accounts.db
 scraped_data/
 telegram_old.py
 tweet_*.json
+
+# Backup files
+*.backup*
+main_bot.py.backup*
+
+# Media storage (contains user data)
+media_storage/data/*.json
+media_storage/data/media/*
+
+# Legacy twitter folder
+twitter/legacy/
+
+# Local test database
+accounts.db

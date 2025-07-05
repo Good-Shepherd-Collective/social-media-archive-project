@@ -25,7 +25,10 @@ class URLDetector:
             r'https?://(?:www\.)?facebook\.com/.+/posts/\d+',
             r'https?://(?:www\.)?facebook\.com/permalink\.php\?story_fbid=\d+',
             r'https?://(?:www\.)?fb\.com/\w+',
-            r'https?://(?:m\.)?facebook\.com/.+/posts/\d+'
+            r'https?://(?:m\.)?facebook\.com/.+/posts/\d+',
+            r'https?://(?:www\.)?facebook\.com/share/[pv]/[\w-]+',
+            r'https?://(?:www\.)?facebook\.com/watch/\?v=\d+',
+            r'https?://(?:www\.)?facebook\.com/[\w\-\.]+/videos/\d+'
         ],
         Platform.INSTAGRAM: [
             r'https?://(?:www\.)?instagram\.com/p/[\w-]+',
