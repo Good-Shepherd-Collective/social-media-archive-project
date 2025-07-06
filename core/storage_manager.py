@@ -15,7 +15,7 @@ from psycopg2.extras import Json
 
 from .data_models import SocialMediaPost, Platform, MediaType
 from .exceptions import StorageError, DatabaseError
-from .media_downloader import media_downloader
+from .smart_media_downloader import smart_media_downloader
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +72,8 @@ class UnifiedStorageManager:
             # Download media files if enabled
             if self.download_media and post.media:
                 logger.info(f"Downloading {len(post.media)} media files for post {post.id}")
-                media_metadata = await media_downloader.download_post_media(
-                    post.media, post.id, post.platform.value
+                media_metadata = await smart_media_downloader.download_post_media(
+                    post.media, post.id, post.platform.value, post.raw_data
                 )
                 
                 # Update post with downloaded media info

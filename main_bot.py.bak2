@@ -222,10 +222,10 @@ Send me a URL from any supported platform to get started.
 
                 
                 # Save post data to JSON file
-                json_result = self.save_post_to_json(post_data, platform, user_context, user_hashtags)
+                self.save_post_to_json(post_data, platform, user_context, user_hashtags)
 
                 # Send success response with detailed format
-                await self._send_success_response(update, platform, post_data, user_hashtags, processing_msg, json_result)
+                await self._send_success_response(update, platform, post_data, user_hashtags, processing_msg)
 
             except Exception as scraping_error:
                 logger.error(f"Scraping error: {scraping_error}")
@@ -287,52 +287,6 @@ Send me a URL from any supported platform to get started.
                                     'file_size': local_path.stat().st_size if local_path.exists() else None
                                 })
                                 logger.info(f"Downloaded media file: {local_filename}")
-                                # Check if this is a Facebook video that needs audio merging
-                                if (post_data.platform.value == 'facebook' and 
-                                    media.media_type.value == 'video' and
-                                    hasattr(post_data, 'raw_data') and 
-                                    post_data.raw_data.get('_audio_stream')):
-                                    
-                                    # Download and merge audio
-                                    audio_url = post_data.raw_data['_audio_stream'].get('base_url')
-                                    if audio_url:
-                                        logger.info(f"Downloading audio stream for Facebook video...")
-                                        audio_path = local_path.parent / f"{post_data.id}_audio.mp4"
-                                        merged_path = local_path.parent / f"{post_data.id}_merged.mp4"
-                                        
-                                        try:
-                                            # Download audio
-                                            audio_response = client.get(audio_url, timeout=30)
-                                            if audio_response.status_code == 200:
-                                                with open(audio_path, 'wb') as f:
-                                                    f.write(audio_response.content)
-                                                
-                                                # Merge with ffmpeg
-                                                import subprocess
-                                                cmd = [
-                                                    'ffmpeg', '-i', str(local_path), '-i', str(audio_path),
-                                                    '-c:v', 'copy', '-c:a', 'copy', '-y', str(merged_path)
-                                                ]
-                                                result = subprocess.run(cmd, capture_output=True, text=True)
-                                                
-                                                if result.returncode == 0:
-                                                    # Replace original with merged
-                                                    import shutil
-                                                    shutil.move(str(merged_path), str(local_path))
-                                                    logger.info(f"Successfully merged video with audio")
-                                                    downloaded_media[-1]['merged'] = True
-                                                else:
-                                                    logger.error(f"Failed to merge: {result.stderr}")
-                                                
-                                                # Clean up
-                                                if audio_path.exists():
-                                                    audio_path.unlink()
-                                                if merged_path.exists():
-                                                    merged_path.unlink()
-                                                    
-                                        except Exception as merge_error:
-                                            logger.error(f"Failed to merge audio: {merge_error}")
-                                
                             else:
                                 # Keep original if download fails
                                 downloaded_media.append({
@@ -411,12 +365,12 @@ Send me a URL from any supported platform to get started.
                 logger.info(f"Saved {platform.value} post {post_data.id} to database")
             else:
                 logger.warning(f"Failed to save {platform.value} post {post_data.id} to database")
-            return post_dict
+            return True
             
         except Exception as e:
             logger.error(f"Failed to save post to JSON: {e}")
-            return None
-    async def _send_success_response(self, update: Update, platform, post_data, user_hashtags: list, processing_msg, json_result=None):
+            return False
+    async def _send_success_response(self, update: Update, platform, post_data, user_hashtags: list, processing_msg):
         """Send detailed success response with proper SocialMediaPost object access"""
         try:
             # Access SocialMediaPost object attributes directly
@@ -450,47 +404,20 @@ Send me a URL from any supported platform to get started.
             ]
             
             # Add media download links if available
-            if json_result and isinstance(json_result, dict) and 'media' in json_result:
-                            media_links = []
-                            downloaded_media = json_result.get('media', [])
-                            
-                            for i, media_info in enumerate(downloaded_media):
-                                # Skip thumbnails and audio for video platforms
-                                if platform.value in ['facebook', 'tiktok']:
-                                    # For Facebook: skip thumbnails after videos
-                                    if (platform.value == 'facebook' and 
-                                        media_info.get('type') == 'photo' and 
-                                        i > 0 and any(m.get('type') == 'video' for m in downloaded_media[:i])):
-                                        continue
-                                    # For TikTok: only show video, skip photo and audio
-                                    if (platform.value == 'tiktok' and 
-                                        media_info.get('type') in ['photo', 'audio'] and
-                                        any(m.get('type') == 'video' for m in downloaded_media)):
-                                        continue
-                                    
-                                if media_info.get('hosted_url'):
-                                    media_type = media_info.get('type', 'file').lower()
-                                    if media_type in ['photo', 'image']:
-                                        icon = "🖼️"
-                                    elif media_type in ['video', 'animated_gif']:
-                                        icon = "🎥"
-                                    else:
-                                        icon = "📎"
-                                    
-                                    # Use local hosted URL instead of original
-                                    url = media_info['hosted_url']
-                                    media_links.append(f'{icon} <a href="{url}">Download {media_type.title()} {len(media_links)+1}</a>')
-                                elif media_info.get('url'):
-                                    # Fallback to original URL if local download failed
-                                    media_type = media_info.get('type', 'file').lower()
-                                    if media_type in ['photo', 'image']:
-                                        icon = "🖼️"
-                                    elif media_type in ['video', 'animated_gif']:
-                                        icon = "🎥"
-                                    else:
-                                        icon = "📎"
-                                    media_links.append(f'{icon} <a href="{media_info["url"]}">Download {media_type.title()} {len(media_links)+1}</a>')
-            if media_links:
+            if post_data.media:
+                media_links = []
+                for i, media in enumerate(post_data.media):
+                    if media.url:
+                        media_type = media.media_type.value.lower()
+                        if media_type in ['photo', 'image']:
+                            icon = "🖼️"
+                        elif media_type in ['video', 'animated_gif']:
+                            icon = "🎥"
+                        else:
+                            icon = "📎"
+                        media_links.append(f'{icon} <a href="{media.url}">Download {media_type.title()} {i+1}</a>')
+                
+                if media_links:
                     response_parts.extend([
                         "",
                         "📥 Media Downloads:"

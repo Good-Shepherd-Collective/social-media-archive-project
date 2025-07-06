@@ -1,6 +1,6 @@
 """
 Facebook scraper using RapidAPI
-Supports posts, videos, and photos
+Supports posts, videos, and photos with video/audio stream merging
 """
 
 import re
@@ -114,8 +114,48 @@ class FacebookScraper(BaseScraper):
         post_type = data.get('type', '')
         
         if post_type in ["video_post", "reel"]:
-            # Check for new format (representations)
-            if 'representations' in data and isinstance(data['representations'], dict):
+            # Check for video_representations (the format from your example)
+            if 'video_representations' in data:
+                video_reps = data['video_representations']
+                if video_reps:
+                    # Extract best video and audio streams
+                    video_streams = [r for r in video_reps if isinstance(r, dict) and r.get('height', 0) > 0]
+                    audio_streams = [r for r in video_reps if isinstance(r, dict) and r.get('height', 0) == 0 and 'mp4a' in r.get('codecs', '')]
+                    
+                    # Mark in raw_data if this needs merging
+                    data['_needs_stream_merge'] = bool(video_streams and audio_streams)
+                    
+                    if video_streams and audio_streams:
+                        # We have separate streams - store both for merging
+                        # Get best quality video
+                        best_video = max(video_streams, key=lambda x: (x.get('height', 0), x.get('bandwidth', 0)))
+                        audio_stream = audio_streams[0]  # Usually only one audio stream
+                        
+                        # Store stream info in raw data for downloader
+                        data['_video_stream'] = best_video
+                        data['_audio_stream'] = audio_stream
+                        
+                        # Create a media item for the video (will be handled specially by downloader)
+                        media_items.append(MediaItem(
+                            url=best_video.get('base_url', ''),
+                            media_type=MediaType.VIDEO,
+                            width=best_video.get('width'),
+                            height=best_video.get('height'),
+                            duration=data.get('playable_duration_s')
+                        ))
+                    elif video_streams:
+                        # Only video (might have embedded audio)
+                        best_video = max(video_streams, key=lambda x: (x.get('height', 0), x.get('bandwidth', 0)))
+                        media_items.append(MediaItem(
+                            url=best_video.get('base_url', ''),
+                            media_type=MediaType.VIDEO,
+                            width=best_video.get('width'),
+                            height=best_video.get('height'),
+                            duration=data.get('playable_duration_s')
+                        ))
+                        
+            # Check for old format (representations)
+            elif 'representations' in data and isinstance(data['representations'], dict):
                 reps_data = data['representations'].get('representations', [])
                 if reps_data:
                     # Filter out audio-only and get best quality video
@@ -129,18 +169,6 @@ class FacebookScraper(BaseScraper):
                             height=best_video.get('height'),
                             duration=data.get('length_in_second', data.get('playable_duration_s'))
                         ))
-            # Check for old format
-            elif 'video_representations' in data:
-                video_reps = data['video_representations']
-                if video_reps:
-                    best_video = max(video_reps, key=lambda x: x.get('bandwidth', 0))
-                    media_items.append(MediaItem(
-                        url=best_video.get('base_url', ''),
-                        media_type=MediaType.VIDEO,
-                        width=best_video.get('width'),
-                        height=best_video.get('height'),
-                        duration=data.get('playable_duration_s')
-                    ))
             
             # Add thumbnail
             if 'thumbnail_uri' in data:
@@ -150,7 +178,7 @@ class FacebookScraper(BaseScraper):
                 ))
         
         elif post_type == 'photo_post':
-            # Handle photo posts (not in this example, but for completeness)
+            # Handle photo posts
             if 'images' in data:
                 for img in data['images']:
                     media_items.append(MediaItem(
