@@ -16,6 +16,25 @@ from .data_models import SocialMediaPost
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+
+def convert_datetime_to_str(obj):
+    """Recursively convert datetime objects to ISO format strings"""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {k: convert_datetime_to_str(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_datetime_to_str(item) for item in obj]
+    return obj
+
+
+def datetime_to_str(obj):
+    """Convert datetime objects to ISO format strings"""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+
 class DatabaseStorage:
     """Handles database storage for social media posts"""
     
@@ -65,6 +84,21 @@ class DatabaseStorage:
             # Remove None values from metrics
             metrics = {k: v for k, v in metrics.items() if v is not None}
             
+            # Prepare raw_data with user notes
+
+            
+            enhanced_raw_data = post.raw_data.copy() if post.raw_data else {}
+
+            
+            if post.user_context and post.user_context.notes:
+
+            
+                enhanced_raw_data['user_notes'] = post.user_context.notes
+
+            
+            
+
+            
             # Insert or update the post
             cur.execute('''
                 INSERT INTO social_media_posts (
@@ -106,7 +140,7 @@ class DatabaseStorage:
                 post.author.avatar_url if post.author else None,
                 post.created_at,
                 post.scraped_at,
-                Json(metrics),
+                Json(convert_datetime_to_str(metrics)),
                 Json(media_items),
                 post.scraped_hashtags,
                 post.user_hashtags,
@@ -114,7 +148,7 @@ class DatabaseStorage:
                 post.user_context.telegram_username if post.user_context else None,
                 post.user_context.first_name if post.user_context else None,
                 post.user_context.last_name if post.user_context else None,
-                Json(post.raw_data) if post.raw_data else None
+                Json(convert_datetime_to_str(enhanced_raw_data))
             ))
             
             conn.commit()

@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# Colors
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+# Load environment
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | xargs)
+fi
+
+echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}         Social Media Archive Database${NC}"
+echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
+echo ""
+
+# Show posts
+echo -e "${YELLOW}Recent Posts (Latest 10):${NC}"
+echo ""
+
+PGPASSWORD=$DB_PASSWORD psql -h localhost -U postgres -d social_media_archive -t -A -F"§" << 'SQL' | while IFS='§' read -r platform scraped_at user_id url text notes tags media_count
+SELECT 
+    platform,
+    to_char(scraped_at, 'YYYY-MM-DD HH24:MI'),
+    telegram_user_id,
+    url,
+    LEFT(content, 100),
+    COALESCE(raw_data->>'user_notes', ''),
+    COALESCE(array_to_string(user_hashtags, ' '), ''),
+    jsonb_array_length(media_items)
+FROM social_media_posts
+WHERE platform IS NOT NULL
+ORDER BY scraped_at DESC
+LIMIT 10;
+SQL
+do
+    if [ ! -z "$platform" ]; then
+        echo -e "${GREEN}───────────────────────────────────────────────────────${NC}"
+        echo -e "📱 ${CYAN}$platform${NC} | 📅 $scraped_at | 👤 User: $user_id"
+        echo -e "🔗 ${BLUE}$url${NC}"
+        echo -e "📝 $text"
+        [ ! -z "$notes" ] && echo -e "💭 ${YELLOW}Notes: $notes${NC}"
+        [ ! -z "$tags" ] && echo -e "🏷️  ${YELLOW}Tags: $tags${NC}"
+        [ "$media_count" -gt 0 ] && echo -e "🎥 Media files: $media_count"
+    fi
+done
+
+echo -e "${GREEN}───────────────────────────────────────────────────────${NC}"
+
+# Statistics
+echo ""
+echo -e "${YELLOW}📊 Archive Statistics:${NC}"
+PGPASSWORD=$DB_PASSWORD psql -h localhost -U postgres -d social_media_archive -t << 'SQL'
+SELECT 
+    '   Total posts: ' || COUNT(*),
+    '   With user notes: ' || COUNT(*) FILTER (WHERE raw_data->>'user_notes' IS NOT NULL),
+    '   With hashtags: ' || COUNT(*) FILTER (WHERE array_length(user_hashtags, 1) > 0),
+    '   With media: ' || COUNT(*) FILTER (WHERE jsonb_array_length(media_items) > 0)
+FROM social_media_posts;
+SQL
+
+echo ""
+echo -e "${CYAN}Web access: ${BLUE}https://ov-ab103a.infomaniak.ch/data/${NC}"

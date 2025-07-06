@@ -88,7 +88,16 @@ Welcome! I can archive content from multiple social media platforms.
 🎵 TikTok
 
 **How to use:**
-Just send me a social media URL and I'll archive it for you!
+Send me a social media URL along with:
+• **Description** to add context (optional but encouraged!)
+• **Hashtags** to categorize the content (e.g., #protest #climate)
+
+**Example:**
+```
+https://twitter.com/user/status/123...
+This shows the youth climate march in downtown today
+#climateaction #protest
+```
 
 **Commands:**
 /help - Show detailed help
@@ -103,6 +112,14 @@ Ready to archive! 📚
         help_message = """
 📚 **Good Shepherd Collective's Archive Bot Help**
 
+**How to use:**
+Send a social media URL with optional description and hashtags:
+```
+URL
+Your description here
+#hashtag1 #hashtag2
+```
+
 **Supported URL formats:**
 
 🐦 **Twitter/X:**
@@ -113,11 +130,20 @@ Ready to archive! 📚
 • https://instagram.com/p/ABC123/
 • https://instagram.com/reel/ABC123/
 
+📘 **Facebook:**
+• https://facebook.com/user/posts/123...
+• https://fb.watch/abc123/
+
+🎵 **TikTok:**
+• https://tiktok.com/@user/video/123...
+
 **Features:**
 ✅ Full content archival
 ✅ Media download
 ✅ Metadata extraction
 ✅ User attribution
+✅ Custom descriptions
+✅ Hashtag categorization
 ✅ Hashtag extraction
 
 **Usage:**
@@ -133,6 +159,40 @@ Ready to archive! 📚
 Need more help? Contact the administrator.
 """
         await update.message.reply_text(help_message, parse_mode='Markdown')
+
+    def parse_user_message(self, text: str):
+        """Parse user message to extract URLs, hashtags, and description
+        
+        Expected format:
+        URL
+        Description (optional)
+        #hashtags (optional)
+        
+        Returns:
+            tuple: (urls, hashtags, description)
+        """
+        import re
+        
+        # Extract all URLs first
+        urls = self.url_detector.extract_urls(text)
+        
+        # Remove URLs from text for further processing
+        text_without_urls = text
+        for url in urls:
+            text_without_urls = text_without_urls.replace(url, '')
+        
+        # Extract all hashtags from the remaining text
+        hashtag_pattern = r'#(\w+)'
+        found_hashtags = re.findall(hashtag_pattern, text_without_urls)
+        hashtags = [f'#{tag}' for tag in found_hashtags]
+        
+        # Remove hashtags from text to get pure description
+        text_without_hashtags = re.sub(hashtag_pattern, '', text_without_urls)
+        
+        # Clean up the description
+        description = ' '.join(text_without_hashtags.split()).strip()
+        
+        return urls, hashtags, description
 
     async def platforms_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /platforms command"""
@@ -161,21 +221,26 @@ Send me a URL from any supported platform to get started.
             logger.info(f"Processing message from {username} (ID: {user_id})")
             logger.info(f"Message: {message_text}")
             
-            # Detect URLs and extract hashtags
-            urls = self.url_detector.extract_urls(message_text)
-            hashtags = self.url_detector.extract_hashtags(message_text)
+            # Parse message to extract URLs, hashtags, and description
+            urls, hashtags, description = self.parse_user_message(message_text)
             
             if not urls:
                 await update.message.reply_text(
                     "🔗 Please send me a social media URL to archive!\n\n"
-                    "Supported platforms: Twitter, Instagram\n"
-                    "Use /help for more information."
+                    "**Format:**\n"
+                    "```\n"
+                    "URL\n"
+                    "Description (optional)\n"
+                    "#hashtags (optional)\n"
+                    "```\n\n"
+                    "Use /help for more information.",
+                    parse_mode='Markdown'
                 )
                 return
 
             # Process each URL
             for url in urls:
-                await self._process_url(update, url, hashtags, user_id, username)
+                await self._process_url(update, url, hashtags, description, user_id, username)
 
         except Exception as e:
             logger.error(f"Error handling message: {e}")
@@ -183,7 +248,7 @@ Send me a URL from any supported platform to get started.
                 "❌ Sorry, an error occurred while processing your message. Please try again."
             )
 
-    async def _process_url(self, update: Update, url: str, user_hashtags: list, user_id: int, username: str):
+    async def _process_url(self, update: Update, url: str, user_hashtags: list, description: str, user_id: int, username: str):
         """Process a single URL"""
         try:
             # Detect platform
@@ -196,7 +261,8 @@ Send me a URL from any supported platform to get started.
             # Create user context
             user_context = UserContext(
                 telegram_user_id=user_id,
-                telegram_username=username
+                telegram_username=username,
+                notes=description
             )
 
             # Send processing message
@@ -389,6 +455,7 @@ Send me a URL from any supported platform to get started.
                     'first_name': user_context.first_name if user_context else None,
                     'last_name': user_context.last_name if user_context else None
                 } if user_context else None,
+                'user_notes': user_context.notes if user_context and user_context.notes else None,
                 'user_hashtags': user_hashtags or [],
                 'download_stats': {
                     'total_media': len(downloaded_media),
@@ -405,6 +472,11 @@ Send me a URL from any supported platform to get started.
                 json.dump(post_dict, f, ensure_ascii=False, indent=2, default=str)
             
             logger.info(f"Saved {platform.value} post {post_data.id} to {filepath}")
+            
+            # Also save to database
+            # Add user hashtags to post before saving
+            if user_hashtags:
+                post_data.user_hashtags = user_hashtags
             
             # Also save to database
             if database_storage.save_post(post_data):
