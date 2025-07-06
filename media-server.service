@@ -1,0 +1,23 @@
+[Unit]
+Description=Social Media Archive Media Server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/social-media-archive-project
+Environment="PATH=/usr/bin:/usr/local/bin"
+Environment="HOME=/home/ubuntu"
+Environment="MEDIA_SERVER_PORT=8000"
+ExecStart=/usr/bin/python3 /home/ubuntu/social-media-archive-project/services/serve_media.py
+
+# Restart configuration
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=append:/home/ubuntu/social-media-archive-project/logs/media-server.log
+StandardError=append:/home/ubuntu/social-media-archive-project/logs/media-server-error.log
+
+[Install]
+WantedBy=multi-user.target

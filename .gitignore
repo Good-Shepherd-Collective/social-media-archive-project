@@ -100,3 +100,4 @@ twitter/legacy/
 
 # Local test database
 accounts.db
+.email_env

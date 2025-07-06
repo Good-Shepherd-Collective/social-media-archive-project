@@ -1,0 +1,23 @@
+[Unit]
+Description=Social Media Bot Monitor with Email Alerts
+After=network.target social-media-bot.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/social-media-archive-project
+EnvironmentFile=/home/ubuntu/social-media-archive-project/.email_env
+Environment="PATH=/usr/bin:/usr/local/bin"
+Environment="HOME=/home/ubuntu"
+ExecStart=/usr/bin/python3 /home/ubuntu/social-media-archive-project/monitor_bot_with_email.py
+
+# Restart configuration
+Restart=always
+RestartSec=30
+
+# Logging
+StandardOutput=append:/home/ubuntu/social-media-archive-project/logs/monitor.log
+StandardError=append:/home/ubuntu/social-media-archive-project/logs/monitor-error.log
+
+[Install]
+WantedBy=multi-user.target

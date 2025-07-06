@@ -5,6 +5,8 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
+RED='\033[0;31m'
 NC='\033[0m'
 
 # Load environment
@@ -17,50 +19,155 @@ echo -e "${CYAN}         Social Media Archive Database${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
 echo ""
 
+# Database Summary
+echo -e "${YELLOW}📊 Database Summary:${NC}"
+echo -e "${GREEN}───────────────────────────────────────────────────────${NC}"
+
+# Total posts
+TOTAL_POSTS=$(PGPASSWORD=$DB_PASSWORD psql -h localhost -U postgres -d social_media_archive -t -c "SELECT COUNT(*) FROM social_media_posts;" | tr -d ' ')
+echo -e "📈 ${CYAN}Total Posts:${NC} $TOTAL_POSTS"
+echo ""
+
+# Posts by platform
+echo -e "📱 ${CYAN}Posts by Platform:${NC}"
+PGPASSWORD=$DB_PASSWORD psql -h localhost -U postgres -d social_media_archive -t -A -F"§" << 'SQL' | while IFS='§' read -r platform count
+SELECT platform, COUNT(*)::text
+FROM social_media_posts
+WHERE platform IS NOT NULL
+GROUP BY platform
+ORDER BY COUNT(*) DESC;
+SQL
+do
+    if [ ! -z "$platform" ]; then
+        printf "   %-12s %s posts\n" "$platform:" "$count"
+    fi
+done
+echo ""
+
+# Posts by user
+echo -e "👥 ${CYAN}Posts by User:${NC}"
+PGPASSWORD=$DB_PASSWORD psql -h localhost -U postgres -d social_media_archive -t -A -F"§" << 'SQL' | while IFS='§' read -r user_id username count
+SELECT 
+    telegram_user_id::text,
+    COALESCE(MAX(raw_data->>'telegram_username'), 'Unknown'),
+    COUNT(*)::text
+FROM social_media_posts
+GROUP BY telegram_user_id
+ORDER BY COUNT(*) DESC;
+SQL
+do
+    if [ ! -z "$user_id" ]; then
+        if [ "$username" != "Unknown" ]; then
+            printf "   %-20s %s posts\n" "@$username:" "$count"
+        else
+            printf "   %-20s %s posts\n" "User $user_id:" "$count"
+        fi
+    fi
+done
+echo ""
+
+# Media statistics
+MEDIA_STATS=$(PGPASSWORD=$DB_PASSWORD psql -h localhost -U postgres -d social_media_archive -t << 'SQL'
+SELECT 
+    COUNT(*) FILTER (WHERE jsonb_array_length(media_items) > 0),
+    COALESCE(SUM(jsonb_array_length(media_items)), 0)
+FROM social_media_posts;
+SQL
+)
+IFS='|' read -r posts_with_media total_media <<< "$MEDIA_STATS"
+echo -e "🎥 ${CYAN}Media Files:${NC}"
+echo -e "   Posts with media: $(echo $posts_with_media | tr -d ' ')"
+echo -e "   Total media files: $(echo $total_media | tr -d ' ')"
+
+echo -e "${GREEN}───────────────────────────────────────────────────────${NC}"
+echo ""
+
 # Show posts
 echo -e "${YELLOW}Recent Posts (Latest 10):${NC}"
 echo ""
 
-PGPASSWORD=$DB_PASSWORD psql -h localhost -U postgres -d social_media_archive -t -A -F"§" << 'SQL' | while IFS='§' read -r platform scraped_at user_id url text notes tags media_count
+PGPASSWORD=$DB_PASSWORD psql -h localhost -U postgres -d social_media_archive -t -A -F"§" << 'SQL' | while IFS='§' read -r post_id platform scraped_at user_id username url text notes tags media_count media_files
 SELECT 
+    id,
     platform,
     to_char(scraped_at, 'YYYY-MM-DD HH24:MI'),
     telegram_user_id,
+    COALESCE(raw_data->>'telegram_username', ''),
     url,
     LEFT(content, 100),
     COALESCE(raw_data->>'user_notes', ''),
     COALESCE(array_to_string(user_hashtags, ' '), ''),
-    jsonb_array_length(media_items)
+    jsonb_array_length(media_items),
+    COALESCE((
+        SELECT string_agg(media->>'local_filename', '|')
+        FROM jsonb_array_elements(media_items) AS media
+        WHERE media->>'local_filename' IS NOT NULL
+    ), '')
 FROM social_media_posts
 WHERE platform IS NOT NULL
 ORDER BY scraped_at DESC
 LIMIT 10;
 SQL
 do
-    if [ ! -z "$platform" ]; then
+    if [ ! -z "$platform" ] && [ ! -z "$post_id" ]; then
         echo -e "${GREEN}───────────────────────────────────────────────────────${NC}"
-        echo -e "📱 ${CYAN}$platform${NC} | 📅 $scraped_at | 👤 User: $user_id"
-        echo -e "🔗 ${BLUE}$url${NC}"
-        echo -e "📝 $text"
-        [ ! -z "$notes" ] && echo -e "💭 ${YELLOW}Notes: $notes${NC}"
-        [ ! -z "$tags" ] && echo -e "🏷️  ${YELLOW}Tags: $tags${NC}"
-        [ "$media_count" -gt 0 ] && echo -e "🎥 Media files: $media_count"
+        
+        # Header line with platform, date, and user
+        if [ ! -z "$username" ] && [ "$username" != " " ]; then
+            echo -e "📱 ${CYAN}$platform${NC} | 📅 $scraped_at | 👤 @$username"
+        else
+            echo -e "📱 ${CYAN}$platform${NC} | 📅 $scraped_at | 👤 User: $user_id"
+        fi
+        
+        # Original URL
+        [ ! -z "$url" ] && echo -e "🔗 ${BLUE}$url${NC}"
+        
+        # Content
+        [ ! -z "$text" ] && [ "$text" != " " ] && echo -e "📝 $text"
+        
+        # User notes if present
+        [ ! -z "$notes" ] && [ "$notes" != " " ] && echo -e "💭 ${YELLOW}Notes: $notes${NC}"
+        
+        # Hashtags if present
+        [ ! -z "$tags" ] && [ "$tags" != " " ] && echo -e "🏷️  ${YELLOW}Tags: $tags${NC}"
+        
+        # Media files
+        if [ "$media_count" -gt 0 ] 2>/dev/null; then
+            echo -e "🎥 Media files: $media_count"
+        fi
+        
+        # Show local archive links
+        echo -e "📂 ${MAGENTA}Archive links:${NC}"
+        
+        # Construct the correct filename based on platform
+        if [ "$platform" = "twitter" ]; then
+            json_filename="tweet_${post_id}.json"
+        else
+            json_filename="${platform}_${post_id}.json"
+        fi
+        
+        echo -e "   📄 JSON: ${BLUE}https://ov-ab103a.infomaniak.ch/data/${json_filename}${NC}"
+        
+        # Show media file links if we have them
+        if [ ! -z "$media_files" ] && [ "$media_files" != " " ] && [ "$media_count" -gt 0 ] 2>/dev/null; then
+            i=1
+            IFS='|' read -ra FILES <<< "$media_files"
+            for filename in "${FILES[@]}"; do
+                if [ ! -z "$filename" ]; then
+                    echo -e "   🎬 Media $i: ${BLUE}https://ov-ab103a.infomaniak.ch/data/media/$filename${NC}"
+                    ((i++))
+                fi
+            done
+        fi
     fi
 done
 
 echo -e "${GREEN}───────────────────────────────────────────────────────${NC}"
 
-# Statistics
+# Footer with links
 echo ""
-echo -e "${YELLOW}📊 Archive Statistics:${NC}"
-PGPASSWORD=$DB_PASSWORD psql -h localhost -U postgres -d social_media_archive -t << 'SQL'
-SELECT 
-    '   Total posts: ' || COUNT(*),
-    '   With user notes: ' || COUNT(*) FILTER (WHERE raw_data->>'user_notes' IS NOT NULL),
-    '   With hashtags: ' || COUNT(*) FILTER (WHERE array_length(user_hashtags, 1) > 0),
-    '   With media: ' || COUNT(*) FILTER (WHERE jsonb_array_length(media_items) > 0)
-FROM social_media_posts;
-SQL
-
+echo -e "${CYAN}🌐 Web Access:${NC}"
+echo -e "   Archive: ${BLUE}https://ov-ab103a.infomaniak.ch/data/${NC}"
+echo -e "   Media: ${BLUE}https://ov-ab103a.infomaniak.ch/data/media/${NC}"
 echo ""
-echo -e "${CYAN}Web access: ${BLUE}https://ov-ab103a.infomaniak.ch/data/${NC}"
+echo -e "${YELLOW}💡 Tip:${NC} Use ${GREEN}./view_archive | less${NC} for paginated view"

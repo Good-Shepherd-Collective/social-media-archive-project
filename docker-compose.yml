@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: social-media-bot
+    restart: always
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - RAPIDAPI_KEY=${RAPIDAPI_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+    volumes:
+      - ./logs:/app/logs
+      - ./scraped_data:/app/scraped_data
+      - ./media:/app/media
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+        window: 120s

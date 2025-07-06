@@ -1,0 +1,26 @@
+[Unit]
+Description=Social Media Archive Bot
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/social-media-archive-project
+Environment="PATH=/usr/bin:/usr/local/bin"
+Environment="HOME=/home/ubuntu"
+ExecStart=/usr/bin/python3 /home/ubuntu/social-media-archive-project/main_bot.py
+
+# Restart configuration
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=append:/home/ubuntu/social-media-archive-project/logs/bot.log
+StandardError=append:/home/ubuntu/social-media-archive-project/logs/bot-error.log
+
+# Resource limits (optional)
+MemoryLimit=1G
+CPUQuota=80%
+
+[Install]
+WantedBy=multi-user.target
