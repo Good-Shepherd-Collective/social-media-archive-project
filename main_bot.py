@@ -1,5 +1,5 @@
 """
-Multi-Platform Social Media Archive Bot
+Good Shepherd Collective's Archive Bot
 Enhanced to support Twitter, Instagram, Facebook, TikTok, and future platforms
 """
 
@@ -77,15 +77,15 @@ class MultiPlatformBot:
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command"""
         welcome_message = """
-🤖 **Multi-Platform Social Media Archive Bot**
+🤖 **Good Shepherd Collective's Archive Bot**
 
 Welcome! I can archive content from multiple social media platforms.
 
 **Supported Platforms:**
 🐦 Twitter/X
 📸 Instagram
-📘 Facebook (coming soon)
-🎵 TikTok (coming soon)
+📘 Facebook
+🎵 TikTok
 
 **How to use:**
 Just send me a social media URL and I'll archive it for you!
@@ -101,7 +101,7 @@ Ready to archive! 📚
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /help command"""
         help_message = """
-📚 **Multi-Platform Archive Bot Help**
+📚 **Good Shepherd Collective's Archive Bot Help**
 
 **Supported URL formats:**
 
@@ -122,7 +122,7 @@ Ready to archive! 📚
 
 **Usage:**
 1. Send me a supported URL
-2. Add hashtags if desired (e.g., #important #research)
+2. Add hashtags if desired (e.g., #settlers #killing)
 3. I'll archive the content and provide download links
 
 **Storage:**
